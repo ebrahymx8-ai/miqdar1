@@ -1,0 +1,23 @@
+[
+  {
+    "userId": "mpeaivzhp366xs52b9",
+    "goal": "cut",
+    "menuType": "premium",
+    "durationDays": 30,
+    "startDate": "2026-05-20",
+    "endDate": "2026-06-19",
+    "status": "active",
+    "frozenDays": 0,
+    "maxFreezeDays": 5,
+    "targetCalories": 3412,
+    "price": 1699,
+    "deliveryFee": 99,
+    "discountAmount": 0,
+    "totalPrice": 1798,
+    "paymentMethod": "cash",
+    "paymentStatus": "confirmed",
+    "id": "mpeajzhevkzor9q31n",
+    "createdAt": "2026-05-20T16:43:43.586Z",
+    "updatedAt": "2026-05-20T16:43:43.586Z"
+  }
+]
