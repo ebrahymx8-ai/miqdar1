@@ -28,8 +28,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable}`}>
-      <head />
-      <body className="bg-surface-subtle font-arabic antialiased">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('miqdar-theme');
+                  if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `
+          }}
+        />
+      </head>
+      <body className="bg-surface-subtle font-arabic antialiased dark:bg-zinc-950 dark:text-zinc-50">
         {children}
         {/* Floating WhatsApp Button */}
         <a

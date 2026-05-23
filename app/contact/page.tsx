@@ -80,19 +80,19 @@ export default function ContactPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-surface-subtle flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-surface-subtle dark:bg-zinc-950 flex flex-col" dir="rtl">
       {toast && (
         <div className="toast" style={{ maxWidth: "90vw", textAlign: "center" }}>{toast}</div>
       )}
 
       {/* Navigation */}
-      <div className="bg-white border-b border-gray-100 py-4 sticky top-0 z-40">
+      <div className="bg-white border-b border-gray-100 dark:bg-zinc-900 dark:border-zinc-800 py-4 sticky top-0 z-40">
         <div className="container-app flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-9 h-9 bg-gradient-brand rounded-xl flex items-center justify-center">
               <span className="text-white font-black">م</span>
             </div>
-            <span className="font-black text-brand-dark text-lg">مقدار</span>
+            <span className="font-black text-brand-dark dark:text-zinc-50 text-lg">مقدار</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link href="/" className="btn-ghost text-sm">الرئيسية</Link>
@@ -108,8 +108,8 @@ export default function ContactPage() {
         <div className="max-w-4xl mx-auto relative z-10">
           <div className="text-center mb-12 page-enter">
             <div className="badge-green mb-3">💬 يسعدنا سماع صوتك</div>
-            <h1 className="section-title text-3xl md:text-4xl">اتصل بنا</h1>
-            <p className="section-subtitle max-w-lg mx-auto">
+            <h1 className="section-title text-3xl md:text-4xl text-brand-dark dark:text-zinc-50">اتصل بنا</h1>
+            <p className="section-subtitle max-w-lg mx-auto dark:text-zinc-400">
               فريق مقدار جاهز للرد على استفساراتك وتلبية احتياجاتك بأسرع وقت ممكن
             </p>
           </div>
@@ -123,14 +123,14 @@ export default function ContactPage() {
                   href={c.link}
                   target={c.link.startsWith("http") ? "_blank" : undefined}
                   rel={c.link.startsWith("http") ? "noopener noreferrer" : undefined}
-                  className="card p-5 flex gap-4 text-right border border-gray-100 hover:shadow-card-hover group items-center transition-all bg-white"
+                  className="card p-5 flex gap-4 text-right border border-gray-100 dark:border-zinc-800 hover:shadow-card-hover group items-center transition-all bg-white dark:bg-zinc-900"
                 >
                   <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${c.color} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform shadow-md`}>
                     {c.icon}
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-brand-dark text-base">{c.title}</h3>
-                    <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{c.desc}</p>
+                    <h3 className="font-bold text-brand-dark dark:text-zinc-50 text-base">{c.title}</h3>
+                    <p className="text-xs text-text-muted dark:text-zinc-400 mt-0.5 leading-relaxed">{c.desc}</p>
                     <div className="font-mono text-brand-orange text-sm font-bold mt-1" dir="ltr">{c.val}</div>
                   </div>
                   <div className="text-brand-light font-bold text-lg opacity-40 group-hover:opacity-100 group-hover:translate-x-[-4px] transition-all">
@@ -141,8 +141,8 @@ export default function ContactPage() {
             </div>
 
             {/* Message Form */}
-            <div className="card p-8 bg-white page-enter" style={{ animationDelay: "0.2s" }}>
-              <h2 className="text-lg font-black text-brand-dark mb-4">أرسل لنا رسالة مباشرة ✉️</h2>
+            <div className="card p-8 bg-white dark:bg-zinc-900 dark:border-zinc-800 page-enter" style={{ animationDelay: "0.2s" }}>
+              <h2 className="text-lg font-black text-brand-dark dark:text-zinc-50 mb-4">أرسل لنا رسالة مباشرة ✉️</h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="label-field">الاسم الكامل *</label>

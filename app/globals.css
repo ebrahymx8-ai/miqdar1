@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ======================================================
    مقدار - نظام الألوان والتوكنز (Tailwind v4 @theme)
    ====================================================== */
@@ -472,4 +474,60 @@ body {
 @media (max-width: 768px) {
   .section-title { font-size: 1.6rem; }
   .btn-primary, .btn-orange { width: 100%; justify-content: center; }
+}
+
+/* ======================================================
+   مقدار - الوضع الداكن المخصص للـ Components
+   ====================================================== */
+.dark body {
+  background-color: #09090b;
+  color: #fafafa;
+}
+.dark .btn-outline {
+  color: #7BC142;
+  border-color: #7BC142;
+}
+.dark .btn-outline:hover {
+  background: #7BC142;
+  color: #09090b;
+  border-color: #7BC142;
+}
+.dark .btn-ghost {
+  color: #7BC142;
+}
+.dark .btn-ghost:hover {
+  background: rgba(123, 193, 66, 0.08);
+}
+.dark .card {
+  background-color: #18181b;
+  border-color: #27272a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+.dark .card:hover {
+  border-color: #3f3f46;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.dark .input-field {
+  background-color: #18181b;
+  border-color: #27272a;
+  color: #fafafa;
+}
+.dark .input-field:focus {
+  border-color: #7BC142;
+  box-shadow: 0 0 0 3px rgba(123, 193, 66, 0.15);
+}
+.dark .input-field::placeholder {
+  color: #718096;
+}
+.dark .label-field {
+  color: #fafafa;
+}
+.dark .section-title {
+  color: #fafafa;
+}
+.dark .section-subtitle {
+  color: #a1a1aa;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #09090b;
 }

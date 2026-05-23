@@ -249,6 +249,23 @@ export default function HomePage() {
   const [selectedTestimonialFilter, setSelectedTestimonialFilter] = useState("الكل");
   const [visibleTestimonialsCount, setVisibleTestimonialsCount] = useState(6);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const isDark = document.documentElement.classList.contains("dark");
+    setTheme(isDark ? "dark" : "light");
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    localStorage.setItem("miqdar-theme", nextTheme);
+    if (nextTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
 
   const faqs = [
     {
@@ -380,7 +397,7 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-surface-subtle" dir="rtl">
+    <div className="min-h-screen bg-surface-subtle dark:bg-zinc-950 dark:text-zinc-50 transition-colors duration-300" dir="rtl">
 
       {/* ===== شريط الإلحاح ===== */}
       <div className="urgency-banner">
@@ -393,101 +410,131 @@ export default function HomePage() {
       </div>
 
       {/* ===== Navigation ===== */}
-      <nav className="glass sticky top-0 z-50 border-b border-brand-light/10">
+      <nav className="glass sticky top-0 z-50 border-b border-brand-light/10 dark:bg-zinc-950/80 dark:border-zinc-800">
         <div className="container-app flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-10 h-10 bg-gradient-brand rounded-xl flex items-center justify-center shadow-brand">
-              <span className="text-white font-black text-lg">م</span>
-            </div>
-            <div>
-              <div className="font-black text-brand-dark text-lg leading-none">مقدار</div>
-              <div className="text-xs text-brand-light font-medium">للوجبات الصحية</div>
-            </div>
+          {/* Logo Text */}
+          <Link href="/" className="flex items-center gap-1.5 flex-shrink-0 group transition-all duration-300 hover:scale-[1.03]">
+            <span className="font-black text-2xl text-brand-dark dark:text-brand-light">مقدار</span>
+            <span className="font-light text-xl text-gray-300 dark:text-white/20">|</span>
+            <span className="font-extrabold text-2xl text-brand-orange tracking-tight">Miqdar</span>
           </Link>
 
           {/* Nav Links */}
-          <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-text-secondary">
-            <Link href="#faq" className="hover:text-brand-dark transition-colors">الأسئلة الشائعة</Link>
-            <Link href="#goals" className="hover:text-brand-dark transition-colors">الأهداف</Link>
-            <Link href="#how" className="hover:text-brand-dark transition-colors">كيف نعمل؟</Link>
-            <Link href="#features" className="hover:text-brand-dark transition-colors">مميزاتنا</Link>
-            <Link href="/contact" className="hover:text-brand-dark transition-colors">اتصل بنا</Link>
+          <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-text-secondary dark:text-zinc-400">
+            <Link href="#faq" className="hover:text-brand-dark dark:hover:text-brand-light transition-colors">الأسئلة الشائعة</Link>
+            <Link href="#goals" className="hover:text-brand-dark dark:hover:text-brand-light transition-colors">الأهداف</Link>
+            <Link href="#how" className="hover:text-brand-dark dark:hover:text-brand-light transition-colors">كيف نعمل؟</Link>
+            <Link href="#features" className="hover:text-brand-dark dark:hover:text-brand-light transition-colors">مميزاتنا</Link>
+            <Link href="/contact" className="hover:text-brand-dark dark:hover:text-brand-light transition-colors">اتصل بنا</Link>
           </div>
 
-          {/* CTA */}
+          {/* CTA Desktop */}
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="btn-ghost">دخول</Link>
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-surface-muted hover:bg-brand-cream/40 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-brand-dark dark:text-brand-orange transition-all duration-300 cursor-pointer"
+              aria-label="Toggle Theme"
+            >
+              {theme === "light" ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-brand-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M14 12a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              )}
+            </button>
+            <Link href="/login" className="btn-ghost dark:text-white dark:hover:bg-white/5">دخول</Link>
             <Link href="/register" className="btn-primary text-sm px-4 py-2">ابدأ الآن →</Link>
           </div>
 
-          {/* Hamburger Menu Button */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 text-brand-dark focus:outline-none"
-            aria-label="Toggle Menu"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+          {/* Mobile Actions (Toggle + Hamburger) */}
+          <div className="flex items-center gap-2 md:hidden">
+            {/* Theme Toggle Button Mobile */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-surface-muted hover:bg-brand-cream/40 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-brand-dark dark:text-brand-orange transition-all duration-300 cursor-pointer"
+              aria-label="Toggle Theme"
             >
-              {isMenuOpen ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              {theme === "light" ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
               ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
+                <svg className="w-5 h-5 text-brand-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M14 12a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
               )}
-            </svg>
-          </button>
+            </button>
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 text-brand-dark dark:text-white focus:outline-none"
+              aria-label="Toggle Menu"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {isMenuOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu Dropdown */}
         {isMenuOpen && (
-          <div className="md:hidden glass border-t border-brand-light/10 animate-fade-in absolute top-16 left-0 right-0 py-4 px-6 flex flex-col gap-4 shadow-lg z-50">
+          <div className="md:hidden glass border-t border-brand-light/10 dark:bg-zinc-950 dark:border-zinc-800 animate-fade-in absolute top-16 left-0 right-0 py-4 px-6 flex flex-col gap-4 shadow-lg z-50">
             <Link
               href="#faq"
               onClick={() => setIsMenuOpen(false)}
-              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100"
+              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100 dark:text-zinc-400 dark:hover:text-brand-light dark:border-zinc-800"
             >
               الأسئلة الشائعة
             </Link>
             <Link
               href="#goals"
               onClick={() => setIsMenuOpen(false)}
-              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-50"
+              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-50 dark:text-zinc-400 dark:hover:text-brand-light dark:border-zinc-800"
             >
               الأهداف
             </Link>
             <Link
               href="#how"
               onClick={() => setIsMenuOpen(false)}
-              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100"
+              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100 dark:text-zinc-400 dark:hover:text-brand-light dark:border-zinc-800"
             >
               كيف نعمل؟
             </Link>
             <Link
               href="#features"
               onClick={() => setIsMenuOpen(false)}
-              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100"
+              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100 dark:text-zinc-400 dark:hover:text-brand-light dark:border-zinc-800"
             >
               مميزاتنا
             </Link>
             <Link
               href="/contact"
               onClick={() => setIsMenuOpen(false)}
-              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100"
+              className="text-text-secondary hover:text-brand-dark font-semibold py-2 border-b border-gray-100 dark:text-zinc-400 dark:hover:text-brand-light dark:border-zinc-800"
             >
               اتصل بنا
             </Link>
@@ -495,7 +542,7 @@ export default function HomePage() {
               <Link
                 href="/login"
                 onClick={() => setIsMenuOpen(false)}
-                className="btn-ghost justify-center py-2.5"
+                className="btn-ghost justify-center py-2.5 dark:text-white dark:hover:bg-white/5"
               >
                 دخول
               </Link>
@@ -512,27 +559,23 @@ export default function HomePage() {
       </nav>
 
       {/* ===== Hero Section ===== */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden py-12 lg:py-20">
         <div className="absolute inset-0 bg-gradient-hero opacity-[0.03] pointer-events-none" />
         <div className="bg-dots absolute inset-0 pointer-events-none" />
 
-        <div className="container-app py-20 md:py-28 relative">
-          <div className="max-w-2xl">
-            <div className="badge-green mb-4 w-fit">
+        <div className="container-app relative z-10">
+          <div className="flex flex-col items-center justify-center text-center max-w-3xl mx-auto py-8">
+            <div className="badge-green mb-6 w-fit">
               🌿 وجبات صحية محسوبة علمياً
             </div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-brand-dark leading-tight mb-6">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-black text-brand-dark dark:text-zinc-50 leading-tight mb-8">
               وجباتك المحسوبة{" "}
               <span className="gradient-text">بدقة</span>
               <br />
               لتحقيق هدفك
             </h1>
-            <p className="text-lg text-text-secondary max-w-xl mb-8 leading-relaxed">
-              اشترك في مقدار واحصل على وجبات صحية يومية مخصصة لجسمك وهدفك. 
-              سعرات حرارية محسوبة بمعادلات علمية، توصيل يومي، وتجميد ذكي.
-            </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-8">
+            <div className="flex flex-col sm:flex-row gap-3 mb-8 justify-center w-full sm:w-auto">
               <Link href="/calculator" id="cta-calculator" className="btn-primary text-base px-8 py-4">
                 🧮 احسب سعراتك مجاناً
               </Link>
@@ -542,48 +585,17 @@ export default function HomePage() {
             </div>
 
             {/* Stats */}
-            <div className="flex flex-wrap gap-6 mt-4">
+            <div className="flex flex-wrap gap-8 mt-4 justify-center">
               {[
                 { val: "+500", label: "مشترك نشط" },
                 { val: "100%", label: "دقة الحسابات" },
                 { val: "4.9★", label: "تقييم العملاء" },
               ].map((s) => (
-                <div key={s.label}>
-                  <div className="text-2xl font-black text-brand-dark">{s.val}</div>
-                  <div className="text-sm text-text-muted">{s.label}</div>
+                <div key={s.label} className="text-center">
+                  <div className="text-2xl font-black text-brand-dark dark:text-brand-light">{s.val}</div>
+                  <div className="text-sm text-text-muted dark:text-zinc-400">{s.label}</div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Hero Card - Floating */}
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 hidden lg:block">
-            <div className="card p-6 w-64 shadow-card-hover animate-fade-in">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-white font-black">أ</div>
-                <div>
-                  <div className="font-bold text-sm">أحمد الشمري</div>
-                  <div className="text-xs text-text-muted">اشتراك تضخيم</div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">الهدف اليومي</span>
-                  <span className="font-bold text-brand-dark">2,850 كيلو</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">بروتين</span>
-                  <span className="font-bold">214 جم</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">أيام متبقية</span>
-                  <span className="font-bold text-brand-orange">18 يوم</span>
-                </div>
-              </div>
-              <div className="mt-3 progress-bar">
-                <div className="progress-fill" style={{ width: "40%" }} />
-              </div>
-              <div className="text-xs text-text-muted mt-1">40% من المدة مكتملة</div>
             </div>
           </div>
         </div>
@@ -591,12 +603,12 @@ export default function HomePage() {
 
 
       {/* ===== Goals Section ===== */}
-      <section id="goals" className="py-20 bg-white">
+      <section id="goals" className="py-20 bg-white dark:bg-zinc-900 transition-colors duration-300">
         <div className="container-app">
           <div className="text-center mb-12">
             <div className="badge-green mx-auto mb-3 w-fit">اختر هدفك</div>
-            <h2 className="section-title">ثلاثة أهداف، حسابات مختلفة</h2>
-            <p className="section-subtitle max-w-xl mx-auto">
+            <h2 className="section-title text-orange-600 dark:text-orange-500">ثلاثة أهداف، حسابات مختلفة</h2>
+            <p className="section-subtitle dark:text-zinc-400 max-w-xl mx-auto">
               كل هدف له خطة سعرات ونسب ماكروز مخصصة محسوبة خصيصاً لجسمك
             </p>
           </div>
@@ -605,7 +617,7 @@ export default function HomePage() {
               <Link
                 key={g.name}
                 href={g.path}
-                className={`card bg-gradient-to-br ${g.color} border ${g.border}/30 text-center flex flex-col items-center justify-between hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 group cursor-pointer no-underline overflow-hidden`}
+                className={`card bg-gradient-to-br ${g.color} dark:from-slate-900/60 dark:to-slate-900/40 dark:border-zinc-800 dark:hover:border-brand-light/30 border ${g.border}/30 text-center flex flex-col items-center justify-between hover:scale-[1.03] active:scale-[0.98] transition-all duration-300 group cursor-pointer no-underline overflow-hidden`}
               >
                 <div className="relative w-full h-16 md:h-32 flex-shrink-0">
                   <Image
@@ -616,12 +628,12 @@ export default function HomePage() {
                     sizes="(max-width: 768px) 33vw, 33vw"
                   />
                   {/* Emoji Overlay */}
-                  <div className="absolute bottom-1 right-1 md:bottom-2 md:right-2 bg-white/90 backdrop-blur-sm w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-base shadow-sm">
+                  <div className="absolute bottom-1 right-1 md:bottom-2 md:right-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-base shadow-sm">
                     {g.icon}
                   </div>
                 </div>
                 <div className="p-2 md:p-4 flex flex-col items-center justify-center flex-grow w-full">
-                  <h3 className="text-xs md:text-lg font-black text-brand-dark leading-tight">
+                  <h3 className="text-xs md:text-lg font-black text-brand-dark dark:text-zinc-50 leading-tight">
                     {g.name}
                   </h3>
                   {g.badge && (
@@ -642,11 +654,11 @@ export default function HomePage() {
       </section>
 
       {/* ===== How it works ===== */}
-      <section id="how" className="py-20 bg-surface-subtle">
+      <section id="how" className="py-20 bg-surface-subtle dark:bg-zinc-950 transition-colors duration-300">
         <div className="container-app">
           <div className="text-center mb-12">
             <div className="badge-green mx-auto mb-3 w-fit">سهل وسريع</div>
-            <h2 className="section-title">ابدأ رحلتك في 3 خطوات</h2>
+            <h2 className="section-title dark:text-zinc-50">ابدأ رحلتك في 3 خطوات</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-8 relative">
             {/* Connector line */}
@@ -656,8 +668,8 @@ export default function HomePage() {
                 <div className="w-20 h-20 rounded-2xl bg-gradient-brand mx-auto mb-4 flex items-center justify-center shadow-brand">
                   <span className="text-white font-black text-2xl">{s.n}</span>
                 </div>
-                <h3 className="font-bold text-lg text-brand-dark mb-2">{s.title}</h3>
-                <p className="text-text-secondary text-sm">{s.desc}</p>
+                <h3 className="font-bold text-lg text-brand-dark dark:text-zinc-50 mb-2">{s.title}</h3>
+                <p className="text-text-secondary dark:text-zinc-400 text-sm">{s.desc}</p>
               </div>
             ))}
           </div>
@@ -665,23 +677,23 @@ export default function HomePage() {
       </section>
 
       {/* ===== Features ===== */}
-      <section id="features" className="py-20 bg-white">
+      <section id="features" className="py-20 bg-white dark:bg-zinc-900 transition-colors duration-300">
         <div className="container-app">
           <div className="text-center mb-12">
             <div className="badge-green mx-auto mb-3 w-fit">لماذا نحن؟</div>
-            <h2 className="section-title">كل ما تحتاجه في مكان واحد</h2>
+            <h2 className="section-title dark:text-zinc-50">كل ما تحتاجه في مكان واحد</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
             {features.map((f, i) => (
               <div
                 key={i}
                 onClick={() => setActiveFeature(f)}
-                className="card p-4 md:p-6 flex flex-col justify-between cursor-pointer transition-all hover:-translate-y-1 hover:shadow-card-hover active:scale-[0.98] select-none text-right bg-white border border-gray-100 group"
+                className="card p-4 md:p-6 flex flex-col justify-between cursor-pointer transition-all hover:-translate-y-1 hover:shadow-card-hover active:scale-[0.98] select-none text-right bg-white dark:bg-zinc-900 dark:border-zinc-800 border border-gray-100 group"
               >
                 <div>
                   <div className="text-2xl md:text-3xl mb-2 md:mb-3 group-hover:scale-110 transition-transform w-fit">{f.icon}</div>
-                  <h3 className="font-bold text-sm md:text-base text-brand-dark mb-1 md:mb-2">{f.title}</h3>
-                  <p className="text-text-secondary text-xs leading-relaxed line-clamp-2 md:line-clamp-none">{f.shortDesc}</p>
+                  <h3 className="font-bold text-sm md:text-base text-brand-dark dark:text-zinc-50 mb-1 md:mb-2">{f.title}</h3>
+                  <p className="text-text-secondary dark:text-zinc-400 text-xs leading-relaxed line-clamp-2 md:line-clamp-none">{f.shortDesc}</p>
                 </div>
                 <div className="text-[10px] md:text-xs font-bold text-brand-light mt-3 flex items-center gap-1 group-hover:text-brand-orange transition-colors">
                   <span>تفاصيل أكثر</span>
@@ -722,7 +734,7 @@ export default function HomePage() {
                 key={p.name} 
                 className={`rounded-2xl text-center overflow-hidden transition-all duration-300 group ${
                   p.highlight 
-                    ? "bg-white text-brand-dark shadow-2xl scale-105" 
+                    ? "bg-white text-brand-dark shadow-2xl scale-105 dark:bg-zinc-900 dark:text-white dark:border dark:border-brand-light/20" 
                     : "bg-brand-dark border border-white/10 text-white"
                 }`}
               >
@@ -741,8 +753,8 @@ export default function HomePage() {
                     {p.highlight ? "⭐ الأكثر اختياراً" : "اقتصادية"}
                   </div>
                   <div className="font-black text-4xl mb-1">{p.price} <span className="text-lg font-semibold">ريال</span></div>
-                  <div className={`text-sm mb-3 ${p.highlight ? "text-text-muted" : "text-white/70"}`}>لمدة {p.days} + 99 ر توصيل</div>
-                  <div className={`text-sm font-medium mb-6 ${p.highlight ? "text-brand-dark" : "text-white"}`}>{p.meals}</div>
+                  <div className={`text-sm mb-3 ${p.highlight ? "text-text-muted dark:text-zinc-400" : "text-white/70"}`}>لمدة {p.days} + 99 ر توصيل</div>
+                  <div className={`text-sm font-medium mb-6 ${p.highlight ? "text-brand-dark dark:text-brand-light" : "text-white"}`}>{p.meals}</div>
                   <Link 
                     href="/calculator" 
                     className="btn-orange w-full justify-center"
@@ -757,12 +769,12 @@ export default function HomePage() {
       </section>
 
       {/* ===== FAQ Section ===== */}
-      <section id="faq" className="py-16 bg-white border-b border-gray-100/40">
+      <section id="faq" className="py-16 bg-white dark:bg-zinc-900 border-b border-gray-100/40 dark:border-zinc-800 transition-colors duration-300">
         <div className="container-app max-w-4xl">
           <div className="text-center mb-10">
             <div className="badge-orange mx-auto mb-3 w-fit">الأسئلة الشائعة</div>
-            <h2 className="section-title">لديك استفسار؟ إجابات سريعة</h2>
-            <p className="section-subtitle max-w-xl mx-auto">
+            <h2 className="section-title dark:text-zinc-50">لديك استفسار؟ إجابات سريعة</h2>
+            <p className="section-subtitle dark:text-zinc-400 max-w-xl mx-auto">
               كل ما تريد معرفته عن اشتراكات مقدار، جودة الطعام، والتوصيل المبرّد في مكة المكرمة
             </p>
           </div>
@@ -773,25 +785,25 @@ export default function HomePage() {
               return (
                 <div
                   key={index}
-                  className="card bg-white border border-gray-100/80 overflow-hidden transition-all duration-300 shadow-sm"
+                  className="card bg-white dark:bg-zinc-900 border border-gray-100/80 dark:border-zinc-800 overflow-hidden transition-all duration-300 shadow-sm"
                 >
                   <button
                     onClick={() => setOpenFaqIndex(isOpen ? null : index)}
-                    className="w-full p-5 text-right flex items-center justify-between gap-4 font-bold text-base md:text-lg text-brand-dark focus:outline-none cursor-pointer select-none"
+                    className="w-full p-5 text-right flex items-center justify-between gap-4 font-bold text-base md:text-lg text-brand-dark dark:text-brand-light focus:outline-none cursor-pointer select-none"
                     aria-expanded={isOpen}
                   >
                     <span className="flex items-center gap-3">
                       <span className="text-brand-orange text-lg font-black">؟</span>
                       {faq.q}
                     </span>
-                    <span className={`w-6 h-6 rounded-full bg-surface-muted flex items-center justify-center text-xs text-brand-dark transition-transform duration-300 ${isOpen ? 'rotate-180 bg-brand-light/20 text-brand-dark font-black' : ''}`}>
+                    <span className={`w-6 h-6 rounded-full bg-surface-muted dark:bg-zinc-900 flex items-center justify-center text-xs text-brand-dark dark:text-brand-light transition-transform duration-300 ${isOpen ? 'rotate-180 bg-brand-light/20 text-brand-dark font-black' : ''}`}>
                       {isOpen ? '▲' : '▼'}
                     </span>
                   </button>
 
-                  <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100 border-t border-gray-150/40' : 'grid-rows-[0fr] opacity-0'}`}>
+                  <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100 border-t border-gray-150/40 dark:border-zinc-800' : 'grid-rows-[0fr] opacity-0'}`}>
                     <div className="overflow-hidden">
-                      <p className="p-5 text-text-secondary text-sm md:text-base leading-relaxed font-medium">
+                      <p className="p-5 text-text-secondary dark:text-zinc-400 text-sm md:text-base leading-relaxed font-medium">
                         {faq.a}
                       </p>
                     </div>
@@ -804,13 +816,13 @@ export default function HomePage() {
       </section>
 
       {/* ===== Testimonials Section ===== */}
-      <section className="py-20 bg-white border-y border-gray-150/40 overflow-hidden">
+      <section className="py-20 bg-white border-y border-gray-150/40 overflow-hidden dark:bg-zinc-900 dark:border-zinc-800">
         <div className="container-app">
           {/* Header */}
           <div className="text-center mb-12">
             <div className="badge-orange mb-3 mx-auto w-fit">💬 آراء عملائنا</div>
-            <h2 className="section-title text-brand-dark">عائلة مقدار يتحدثون عن تجربتهم</h2>
-            <p className="section-subtitle max-w-xl mx-auto">
+            <h2 className="section-title text-brand-dark dark:text-zinc-50">عائلة مقدار يتحدثون عن تجربتهم</h2>
+            <p className="section-subtitle max-w-xl mx-auto dark:text-zinc-400">
               أكثر من 500 مشترك وصلوا لأهدافهم بمرونة وبدون حرمان. إليك بعض تقييماتهم الحقيقية:
             </p>
           </div>
@@ -826,8 +838,8 @@ export default function HomePage() {
                 }}
                 className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all cursor-pointer select-none ${
                   selectedTestimonialFilter === tab
-                    ? "bg-brand-dark text-white shadow-md scale-105"
-                    : "bg-surface-muted text-text-secondary border border-transparent hover:border-brand-light/30 hover:bg-brand-cream/40"
+                    ? "bg-brand-dark text-white shadow-md scale-105 dark:bg-brand-light dark:text-zinc-950"
+                    : "bg-surface-muted text-text-secondary border border-transparent hover:border-brand-light/30 hover:bg-brand-cream/40 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-brand-cream/10"
                 }`}
               >
                 {tab}
@@ -838,19 +850,19 @@ export default function HomePage() {
           {/* Desktop Grid Layout (hidden on mobile, visible on md and up) */}
           <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredTestimonials.slice(0, visibleTestimonialsCount).map((item) => (
-              <div key={item.id} className="card p-6 bg-white border border-gray-100/80 hover:-translate-y-1.5 hover:shadow-card-hover transition-all duration-300 flex flex-col justify-between group">
+              <div key={item.id} className="card p-6 bg-white border border-gray-100/80 hover:-translate-y-1.5 hover:shadow-card-hover transition-all duration-300 flex flex-col justify-between group dark:bg-zinc-900 dark:border-zinc-800">
                 <div>
                   {/* Rating Stars */}
                   <div className="mb-3.5">
                     {renderStars(item.rating, item.id, false)}
                   </div>
                   {/* Review Text */}
-                  <p className="text-text-secondary text-sm leading-relaxed mb-4 font-medium italic">
+                  <p className="text-text-secondary text-sm leading-relaxed mb-4 font-medium italic dark:text-zinc-400">
                     "{item.text}"
                   </p>
                 </div>
                 {/* Author Info */}
-                <div className="flex items-center justify-between pt-4 border-t border-gray-50 mt-auto">
+                <div className="flex items-center justify-between pt-4 border-t border-gray-50 mt-auto dark:border-zinc-800">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${
                       item.target === "تضخيم" ? "from-green-500 to-brand-dark" :
@@ -860,14 +872,14 @@ export default function HomePage() {
                       {item.name.charAt(0)}
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-brand-dark">{item.name}</h4>
-                      <span className="text-[11px] text-text-muted">📍 {item.city}</span>
+                      <h4 className="font-bold text-sm text-brand-dark dark:text-zinc-50">{item.name}</h4>
+                      <span className="text-[11px] text-text-muted dark:text-zinc-400">📍 {item.city}</span>
                     </div>
                   </div>
                   <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                    item.target === "تضخيم" ? "bg-green-50 text-brand-dark border border-brand-dark/20" :
-                    item.target === "تنشيف" ? "bg-orange-50 text-brand-orange border border-brand-orange/20" :
-                    "bg-lime-50 text-lime-800 border border-lime-200/50"
+                    item.target === "تضخيم" ? "bg-green-50 text-brand-dark border border-brand-dark/20 dark:bg-green-950/30 dark:text-brand-light dark:border-brand-light/20" :
+                    item.target === "تنشيف" ? "bg-orange-50 text-brand-orange border border-brand-orange/20 dark:bg-orange-950/30 dark:text-brand-orange dark:border-brand-orange/20" :
+                    "bg-lime-50 text-lime-800 border border-lime-200/50 dark:bg-lime-950/30 dark:text-lime-400 dark:border-lime-900/30"
                   }`}>
                     اشتراك {item.target}
                   </span>
@@ -881,7 +893,7 @@ export default function HomePage() {
             <div className="hidden md:flex justify-center mt-10">
               <button
                 onClick={() => setVisibleTestimonialsCount((prev) => prev + 6)}
-                className="btn-outline text-sm px-8 py-3.5 hover:bg-brand-orange hover:border-brand-orange hover:text-white font-semibold"
+                className="btn-outline text-sm px-8 py-3.5 hover:bg-brand-orange hover:border-brand-orange hover:text-white font-semibold dark:border-brand-light dark:text-brand-light dark:hover:bg-brand-orange dark:hover:text-white dark:hover:border-brand-orange"
               >
                 عرض المزيد من الآراء ({filteredTestimonials.length - visibleTestimonialsCount} متبقية)
               </button>
@@ -894,17 +906,17 @@ export default function HomePage() {
               {filteredTestimonials.map((item) => (
                 <div
                   key={item.id}
-                  className="snap-center shrink-0 w-[290px] card p-5 bg-white border border-gray-100 flex flex-col justify-between shadow-md animate-fade-in"
+                  className="snap-center shrink-0 w-[290px] card p-5 bg-white border border-gray-100 flex flex-col justify-between shadow-md animate-fade-in dark:bg-zinc-900 dark:border-zinc-800"
                 >
                   <div>
                     <div className="mb-3">
                       {renderStars(item.rating, item.id, true)}
                     </div>
-                    <p className="text-text-secondary text-xs leading-relaxed mb-4 font-medium italic line-clamp-4">
+                    <p className="text-text-secondary text-xs leading-relaxed mb-4 font-medium italic line-clamp-4 dark:text-zinc-400">
                       "{item.text}"
                     </p>
                   </div>
-                  <div className="flex items-center justify-between pt-3.5 border-t border-gray-50 mt-auto">
+                  <div className="flex items-center justify-between pt-3.5 border-t border-gray-50 mt-auto dark:border-zinc-800">
                     <div className="flex items-center gap-2">
                       <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${
                         item.target === "تضخيم" ? "from-green-500 to-brand-dark" :
@@ -914,14 +926,14 @@ export default function HomePage() {
                         {item.name.charAt(0)}
                       </div>
                       <div>
-                        <h4 className="font-bold text-xs text-brand-dark">{item.name}</h4>
-                        <span className="text-[10px] text-text-muted">📍 {item.city}</span>
+                        <h4 className="font-bold text-xs text-brand-dark dark:text-zinc-50">{item.name}</h4>
+                        <span className="text-[10px] text-text-muted dark:text-zinc-400">📍 {item.city}</span>
                       </div>
                     </div>
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                      item.target === "تضخيم" ? "bg-green-50 text-brand-dark border border-brand-dark/20" :
-                      item.target === "تنشيف" ? "bg-orange-50 text-brand-orange border border-brand-orange/20" :
-                      "bg-lime-50 text-lime-800 border border-lime-200/50"
+                      item.target === "تضخيم" ? "bg-green-50 text-brand-dark border border-brand-dark/20 dark:bg-green-950/30 dark:text-brand-light dark:border-brand-light/20" :
+                      item.target === "تنشيف" ? "bg-orange-50 text-brand-orange border border-brand-orange/20 dark:bg-orange-950/30 dark:text-brand-orange dark:border-brand-orange/20" :
+                      "bg-lime-50 text-lime-800 border border-lime-200/50 dark:bg-lime-950/30 dark:text-lime-400 dark:border-lime-900/30"
                     }`}>
                       {item.target}
                     </span>
@@ -930,7 +942,7 @@ export default function HomePage() {
               ))}
             </div>
             {/* Scroll Indicator Hint */}
-            <div className="text-center text-xs text-text-muted mt-2 animate-pulse-soft">
+            <div className="text-center text-xs text-text-muted mt-2 animate-pulse-soft dark:text-zinc-400">
               ← اسحب لرؤية التقييمات ({filteredTestimonials.length}) →
             </div>
           </div>
@@ -939,10 +951,10 @@ export default function HomePage() {
       </section>
 
       {/* ===== CTA Final ===== */}
-      <section className="py-16 bg-surface-subtle">
+      <section className="py-16 bg-surface-subtle dark:bg-zinc-950">
         <div className="container-app text-center">
-          <h2 className="text-3xl font-black text-brand-dark mb-3">مستعد تبدأ رحلتك الصحية؟</h2>
-          <p className="text-text-secondary mb-8">احسب سعراتك مجاناً وابدأ اليوم</p>
+          <h2 className="text-3xl font-black text-brand-dark dark:text-zinc-50 mb-3">مستعد تبدأ رحلتك الصحية؟</h2>
+          <p className="text-text-secondary dark:text-zinc-400 mb-8">احسب سعراتك مجاناً وابدأ اليوم</p>
           <Link href="/calculator" id="final-cta" className="btn-primary px-12 py-4 text-lg">
             🧮 احسب سعراتي مجاناً
           </Link>
@@ -955,14 +967,11 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-12">
             {/* Column 1: Brand Info */}
             <div className="space-y-4 text-center md:text-right">
-              <Link href="/" className="flex items-center gap-2 justify-center md:justify-start">
-                <div className="w-10 h-10 bg-brand-light rounded-xl flex items-center justify-center shadow-brand">
-                  <span className="text-white font-black text-lg">م</span>
-                </div>
-                <div>
-                  <div className="font-black text-lg text-white leading-none">مقدار</div>
-                  <div className="text-xs text-brand-light/80 font-medium mt-1">للوجبات الصحية</div>
-                </div>
+              {/* Logo Text */}
+              <Link href="/" className="flex items-center gap-1.5 justify-center md:justify-start group transition-all duration-300 hover:scale-[1.03] w-fit mx-auto md:mx-0">
+                <span className="font-black text-2xl text-brand-light">مقدار</span>
+                <span className="font-light text-xl text-white/30">|</span>
+                <span className="font-extrabold text-2xl text-brand-orange tracking-tight">Miqdar</span>
               </Link>
               <p className="text-sm text-white/70 leading-relaxed max-w-sm mx-auto md:mx-0">
                 منصة اشتراك الوجبات الصحية السعودية الأولى التي تحسب احتياجك الفسيولوجي بدقة وتوفر وجبات طازجة ومتنوعة يومياً لتصل إلى هدفك الصحي بكل مرونة.
@@ -1060,11 +1069,11 @@ export default function HomePage() {
           />
 
           {/* Modal Content */}
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative z-10 shadow-2xl border border-brand-light/10 animate-slide-up text-right">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full relative z-10 shadow-2xl border border-brand-light/10 animate-slide-up text-right dark:bg-zinc-950 dark:border-zinc-800">
             {/* Close Button */}
             <button
               onClick={() => setActiveFeature(null)}
-              className="absolute top-4 left-4 w-8 h-8 rounded-full bg-surface-muted hover:bg-brand-cream text-brand-dark flex items-center justify-center font-bold transition-colors cursor-pointer"
+              className="absolute top-4 left-4 w-8 h-8 rounded-full bg-surface-muted hover:bg-brand-cream text-brand-dark flex items-center justify-center font-bold transition-colors cursor-pointer dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-brand-light"
               aria-label="Close"
             >
               ✕
@@ -1076,13 +1085,13 @@ export default function HomePage() {
                 {activeFeature.icon}
               </div>
               <div>
-                <h3 className="text-lg md:text-xl font-black text-brand-dark">{activeFeature.title}</h3>
+                <h3 className="text-lg md:text-xl font-black text-brand-dark dark:text-zinc-50">{activeFeature.title}</h3>
                 <p className="text-xs text-brand-light font-semibold mt-0.5">ميزة مقدار المميزة</p>
               </div>
             </div>
 
             {/* Full Description */}
-            <p className="text-sm text-text-secondary leading-relaxed mb-6">
+            <p className="text-sm text-text-secondary leading-relaxed mb-6 dark:text-zinc-400">
               {activeFeature.desc}
             </p>
 
@@ -1097,7 +1106,7 @@ export default function HomePage() {
               </Link>
               <button
                 onClick={() => setActiveFeature(null)}
-                className="btn-outline py-3 text-sm px-5 font-semibold rounded-xl border-2 border-brand-dark text-brand-dark cursor-pointer hover:bg-brand-dark hover:text-white"
+                className="btn-outline py-3 text-sm px-5 font-semibold rounded-xl border-2 border-brand-dark text-brand-dark cursor-pointer hover:bg-brand-dark hover:text-white dark:border-brand-light dark:text-brand-light dark:hover:bg-brand-light dark:hover:text-zinc-950"
               >
                 إغلاق
               </button>

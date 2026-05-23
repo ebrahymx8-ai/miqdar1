@@ -66,15 +66,15 @@ export default function RegisterPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-surface-subtle flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-surface-subtle dark:bg-zinc-950 flex flex-col" dir="rtl">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 py-4">
+      <div className="bg-white border-b border-gray-100 dark:bg-zinc-900 dark:border-zinc-800 py-4">
         <div className="container-app flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-9 h-9 bg-gradient-brand rounded-xl flex items-center justify-center">
               <span className="text-white font-black">م</span>
             </div>
-            <span className="font-black text-brand-dark text-lg">مقدار</span>
+            <span className="font-black text-brand-dark dark:text-zinc-50 text-lg">مقدار</span>
           </Link>
           <Link href="/login" className="btn-ghost text-sm">لديك حساب؟ سجل دخول</Link>
         </div>
@@ -92,10 +92,10 @@ export default function RegisterPage() {
           </div>
 
           <div className="card p-8">
-            <h1 className="text-2xl font-black text-brand-dark mb-1">
+            <h1 className="text-2xl font-black text-brand-dark dark:text-zinc-50 mb-1">
               {step === 1 ? "إنشاء حسابك" : "بياناتك الجسدية"}
             </h1>
-            <p className="text-text-muted text-sm mb-6">
+            <p className="text-text-muted dark:text-zinc-400 text-sm mb-6">
               {step === 1 ? "الخطوة 1 من 2: المعلومات الشخصية" : "الخطوة 2 من 2: لحساب سعراتك بدقة"}
             </p>
 
@@ -140,7 +140,7 @@ export default function RegisterPage() {
                     {[{ v: "male", l: "ذكر 👨" }, { v: "female", l: "أنثى 👩" }].map((g) => (
                       <button id={`reg-gender-${g.v}`} key={g.v} type="button"
                         onClick={() => update("gender", g.v)}
-                        className={`p-3 rounded-xl border-2 font-bold text-sm transition-all ${form.gender === g.v ? "border-brand-dark bg-green-50 text-brand-dark" : "border-gray-200 text-text-secondary hover:border-brand-light"}`}>
+                        className={`p-3 rounded-xl border-2 font-bold text-sm transition-all cursor-pointer ${form.gender === g.v ? "border-brand-dark bg-green-50 text-brand-dark dark:bg-green-950/20 dark:text-brand-light dark:border-brand-light" : "border-gray-200 text-text-secondary hover:border-brand-light dark:border-zinc-800 dark:text-zinc-400 dark:hover:border-brand-light"}`}>
                         {g.l}
                       </button>
                     ))}
@@ -169,9 +169,9 @@ export default function RegisterPage() {
                     {activityOptions.map((a) => (
                       <button id={`reg-activity-${a.value}`} key={a.value} type="button"
                         onClick={() => update("activityLevel", a.value)}
-                        className={`w-full p-3 rounded-xl border-2 text-right flex items-center justify-between transition-all ${form.activityLevel === a.value ? "border-brand-dark bg-green-50" : "border-gray-200 hover:border-brand-light"}`}>
-                        <span className="font-semibold text-sm">{a.label}</span>
-                        <span className="text-xs text-text-muted">{a.sub}</span>
+                        className={`w-full p-3 rounded-xl border-2 text-right flex items-center justify-between transition-all cursor-pointer ${form.activityLevel === a.value ? "border-brand-dark bg-green-50 dark:bg-green-950/20 dark:border-brand-light" : "border-gray-200 hover:border-brand-light dark:border-zinc-800 dark:hover:border-brand-light"}`}>
+                        <span className="font-semibold text-sm text-brand-dark dark:text-brand-light">{a.label}</span>
+                        <span className="text-xs text-text-muted dark:text-zinc-400">{a.sub}</span>
                       </button>
                     ))}
                   </div>
