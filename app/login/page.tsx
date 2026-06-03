@@ -8,12 +8,46 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ phone: "", password: "" });
+  const [isStaffLogin, setIsStaffLogin] = useState(false);
+  const [staffPin, setStaffPin] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.phone || !form.password) { setError("أدخل رقم الجوال وكلمة المرور"); return; }
     setLoading(true);
     setError("");
+
+    if (isStaffLogin) {
+      if (!staffPin || staffPin.length !== 4) {
+        setError("أدخل رمز دخول الموظف المكون من 4 أرقام");
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/business/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pinCode: staffPin }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "رمز الدخول غير صحيح");
+          setLoading(false);
+          return;
+        }
+        
+        // Save business login session in localStorage to prevent page reload flashes
+        localStorage.setItem("miqdar_business_authenticated", "true");
+        localStorage.setItem("miqdar_business_role", data.user.role);
+        
+        router.push("/business");
+      } catch {
+        setError("خطأ في الاتصال بالخادم");
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!form.phone || !form.password) { setError("أدخل رقم الجوال وكلمة المرور"); setLoading(false); return; }
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -60,39 +94,77 @@ export default function LoginPage() {
               </div>
             )}
 
+            <div className="flex gap-2 p-1 bg-zinc-50 dark:bg-zinc-800 rounded-xl mb-6 border border-zinc-200/40 dark:border-zinc-700/40">
+              <button
+                type="button"
+                onClick={() => { setIsStaffLogin(false); setError(""); }}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${!isStaffLogin ? "bg-[#0B532B] text-white shadow-sm" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-200"}`}
+              >
+                دخول المشتركين 👤
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsStaffLogin(true); setError(""); }}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${isStaffLogin ? "bg-[#0B532B] text-white shadow-sm" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-200"}`}
+              >
+                دخول الطباخ / الموظفين 🔑
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label-field">رقم الجوال</label>
-                <input
-                  id="login-phone"
-                  className="input-field"
-                  placeholder="05XXXXXXXX"
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  maxLength={10}
-                  autoComplete="tel"
-                />
-              </div>
-              <div>
-                <label className="label-field">كلمة المرور</label>
-                <input
-                  id="login-password"
-                  type="password"
-                  className="input-field"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  autoComplete="current-password"
-                />
-                <div className="text-left mt-2">
-                  <Link href="/forgot-password" className="text-[#54A354] dark:text-[#7BC142] hover:text-[#54A354]/80 transition-colors text-sm font-medium">
-                    نسيت كلمة المرور؟
-                  </Link>
+              {!isStaffLogin ? (
+                <>
+                  <div>
+                    <label className="label-field">رقم الجوال</label>
+                    <input
+                      id="login-phone"
+                      className="input-field"
+                      placeholder="05XXXXXXXX"
+                      value={form.phone}
+                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                      maxLength={10}
+                      autoComplete="tel"
+                    />
+                  </div>
+                  <div>
+                    <label className="label-field">كلمة المرور</label>
+                    <input
+                      id="login-password"
+                      type="password"
+                      className="input-field"
+                      placeholder="••••••••"
+                      value={form.password}
+                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      autoComplete="current-password"
+                    />
+                    <div className="text-left mt-2">
+                      <Link href="/forgot-password" className="text-[#54A354] dark:text-[#7BC142] hover:text-[#54A354]/80 transition-colors text-sm font-medium">
+                        نسيت كلمة المرور؟
+                      </Link>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <label className="label-field text-center block font-bold">رمز الدخول الخاص (PIN / Passcode)</label>
+                  <input
+                    id="staff-pin"
+                    type="password"
+                    maxLength={4}
+                    placeholder="••••"
+                    value={staffPin}
+                    onChange={(e) => setStaffPin(e.target.value.replace(/\D/g, ""))}
+                    className="w-full text-center tracking-[1em] text-2xl font-black p-3.5 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-[#0B532B] dark:text-[#76C139]"
+                    autoComplete="off"
+                  />
+                  <p className="text-[10px] text-center text-text-muted dark:text-zinc-500">
+                    أدخل رمز الدخول المكون من 4 أرقام المخصص لك كطباخ أو موظف
+                  </p>
                 </div>
-              </div>
+              )}
 
               <button id="login-submit" type="submit" className="btn-primary w-full mt-2" disabled={loading}>
-                {loading ? <><span className="spinner" /> <span>جاري الدخول...</span></> : "تسجيل الدخول →"}
+                {loading ? <><span className="spinner" /> <span>جاري الدخول...</span></> : (isStaffLogin ? "تسجيل دخول الموظف →" : "تسجيل الدخول →")}
               </button>
             </form>
 

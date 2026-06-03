@@ -36,13 +36,30 @@ export default function MiqdarBusinessPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("miqdar_business_authenticated") === "true";
+    }
+    return false;
+  });
   const [pinCode, setPinCode] = useState<string>("");
-  const [currentUserRole, setCurrentUserRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook" | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook" | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("miqdar_business_role") as any;
+    }
+    return null;
+  });
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   // Dashboard Role State: 'manager' | 'kitchen' | 'purchaser' | 'delivery' | 'cook'
-  const [activeRole, setActiveRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook">("manager");
+  const [activeRole, setActiveRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook">((() => {
+    if (typeof window !== "undefined") {
+      const storedRole = localStorage.getItem("miqdar_business_role");
+      if (storedRole) return storedRole as any;
+    }
+    return "manager";
+  })());
 
   // Kitchen Category filter
   const [selectedKitchenCategory, setSelectedKitchenCategory] = useState<string>("الكل");
@@ -135,6 +152,17 @@ export default function MiqdarBusinessPage() {
       } else {
         setLatestMeals(null);
       }
+
+      // 4. Fetch team members if manager
+      const storedRole = typeof window !== "undefined" ? localStorage.getItem("miqdar_business_role") : null;
+      const currentRole = currentUserRole || storedRole;
+      if (currentRole === "manager") {
+        const teamResponse = await fetch("/api/business/login?all=true");
+        const teamData = await teamResponse.json();
+        if (teamResponse.ok && teamData.team) {
+          setTeamMembers(teamData.team);
+        }
+      }
     } catch (error) {
       console.error("Error fetching database data:", error);
       showToast("❌ خطأ في تحميل البيانات من قاعدة البيانات");
@@ -142,6 +170,86 @@ export default function MiqdarBusinessPage() {
       setIsLoading(false);
     }
   };
+
+  const [isPushSubscribed, setIsPushSubscribed] = useState<boolean>(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+
+  const sendSubscriptionToServer = async (subscription: PushSubscription) => {
+    try {
+      await fetch("/api/business/notifications/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription }),
+      });
+    } catch (err) {
+      console.error("Error sending push subscription to server:", err);
+    }
+  };
+
+  const setupPushNotifications = async () => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      console.warn("Service workers or Push notifications are not supported in this browser.");
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      console.log("Service Worker registered with scope:", registration.scope);
+
+      const existingSubscription = await registration.pushManager.getSubscription();
+      if (existingSubscription) {
+        setIsPushSubscribed(true);
+        await sendSubscriptionToServer(existingSubscription);
+        return;
+      }
+
+      if (Notification.permission === "denied") {
+        showToast("⚠️ تم رفض صلاحية التنبيهات مسبقاً. يرجى تفعيلها من إعدادات المتصفح.");
+        return;
+      }
+
+      if (Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          showToast("⚠️ لم يتم منح صلاحية التنبيهات.");
+          return;
+        }
+      }
+
+      const vapidPublicKey = "BIubJL8mQ-j95iJHeEu8tZIgVNptB3Y48I4H1NS5AnCLCGhi-WABYbdBIPil2IfY3rqvhszs-Z08HpG3H6jZ8Yc";
+      const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedVapidKey
+      });
+
+      setIsPushSubscribed(true);
+      await sendSubscriptionToServer(subscription);
+      showToast("🔔 تم تفعيل التنبيهات بنجاح!");
+    } catch (err) {
+      console.error("Error setting up Web Push:", err);
+      setPushError(String(err));
+    }
+  };
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  // Setup push notifications automatically when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      setupPushNotifications();
+    }
+  }, [isAuthenticated]);
 
   // Check active business session on mount
   useEffect(() => {
@@ -151,10 +259,17 @@ export default function MiqdarBusinessPage() {
         const res = await fetch("/api/business/login");
         const data = await res.json();
         if (res.ok && data.authenticated && data.user) {
+          localStorage.setItem("miqdar_business_authenticated", "true");
+          localStorage.setItem("miqdar_business_role", data.user.role);
           setIsAuthenticated(true);
           setCurrentUserRole(data.user.role);
           setActiveRole(data.user.role);
           showToast(`🔑 تم استعادة الجلسة: مرحباً ${data.user.name}`);
+        } else {
+          localStorage.removeItem("miqdar_business_authenticated");
+          localStorage.removeItem("miqdar_business_role");
+          setIsAuthenticated(false);
+          setCurrentUserRole(null);
         }
       } catch (error) {
         console.error("Error checking session:", error);
@@ -170,7 +285,7 @@ export default function MiqdarBusinessPage() {
     if (isAuthenticated) {
       fetchDashboardData();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, currentUserRole]);
 
   const toggleTheme = () => {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -204,6 +319,8 @@ export default function MiqdarBusinessPage() {
       const data = await response.json();
 
       if (response.ok && data.success) {
+        localStorage.setItem("miqdar_business_authenticated", "true");
+        localStorage.setItem("miqdar_business_role", data.user.role);
         setIsAuthenticated(true);
         setCurrentUserRole(data.user.role);
         setActiveRole(data.user.role);
@@ -225,6 +342,8 @@ export default function MiqdarBusinessPage() {
     setIsLoading(true);
     try {
       await fetch("/api/business/login", { method: "DELETE" });
+      localStorage.removeItem("miqdar_business_authenticated");
+      localStorage.removeItem("miqdar_business_role");
       setIsAuthenticated(false);
       setCurrentUserRole(null);
       setActiveRole("manager");
@@ -502,6 +621,7 @@ export default function MiqdarBusinessPage() {
         };
         setLogs((prev) => [newLog, ...prev]);
         showToast(`🔐 تم تحديث الرمز السري لـ ${roleNameAr} بنجاح!`);
+        fetchDashboardData();
       } else {
         setPasswordFormError(data.error || "فشل تحديث الرمز السري بقاعدة البيانات");
         showToast("❌ فشل تحديث الرمز السري");
@@ -1036,6 +1156,21 @@ export default function MiqdarBusinessPage() {
               <p className="font-bold text-sm text-[#0B532B] dark:text-[#76C139]">{getCurrentTime()}</p>
             </div>
             
+            {/* Header Notification Toggle Button */}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={setupPushNotifications}
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all shadow cursor-pointer active:scale-95 shrink-0 text-white ${
+                  isPushSubscribed 
+                    ? "bg-green-600 hover:bg-green-700" 
+                    : "bg-[#0B532B] hover:bg-[#07361c]"
+                }`}
+              >
+                <span>{isPushSubscribed ? "🟢 التنبيهات نشطة" : "🔔 تفعيل التنبيهات"}</span>
+              </button>
+            )}
+
             {/* Header Logout Button */}
             <button
               onClick={handleLogout}
@@ -1380,6 +1515,7 @@ export default function MiqdarBusinessPage() {
                             <option value="kitchen">مسؤول المطبخ</option>
                             <option value="purchaser">مندوب المقاضي</option>
                             <option value="delivery">مندوب التوصيل</option>
+                            <option value="cook">الطباخ (رمز ثابت)</option>
                           </select>
                         </div>
 
@@ -1410,6 +1546,75 @@ export default function MiqdarBusinessPage() {
                         </button>
                       </div>
                     </form>
+
+                    {currentUserRole === "manager" && teamMembers && teamMembers.length > 0 && (
+                      <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
+                        <div className="flex items-center gap-2 text-[#0B532B] dark:text-zinc-200">
+                          <span className="text-sm">👥</span>
+                          <h4 className="text-sm font-extrabold">
+                            رموز الدخول الحالية للفريق
+                          </h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-right text-xs">
+                            <thead>
+                              <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-500 font-bold">
+                                <th className="pb-2">اسم الموظف</th>
+                                <th className="pb-2">الدور / الصلاحية</th>
+                                <th className="pb-2 text-center">رمز الدخول الحالي</th>
+                                <th className="pb-2 text-left">الإجراء</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
+                              {teamMembers.map((member) => {
+                                let roleAr = "";
+                                if (member.role === "manager") roleAr = "مدير المشروع";
+                                else if (member.role === "kitchen") roleAr = "مسؤول المطبخ";
+                                else if (member.role === "purchaser") roleAr = "مندوب المقاضي";
+                                else if (member.role === "delivery") roleAr = "مندوب التوصيل";
+                                else if (member.role === "cook") roleAr = "طباخ مقدار";
+
+                                return (
+                                  <tr key={member.id} className="text-zinc-800 dark:text-zinc-200">
+                                    <td className="py-3 font-semibold">{member.name}</td>
+                                    <td className="py-3">
+                                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                        member.role === "manager" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/20 dark:text-amber-400" :
+                                        member.role === "cook" ? "bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400" :
+                                        "bg-green-100 text-green-800 dark:bg-green-950/20 dark:text-green-400"
+                                      }`}>
+                                        {roleAr}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 text-center font-mono font-bold tracking-wider text-[#E7792B]">
+                                      {member.pinCode}
+                                    </td>
+                                    <td className="py-3 text-left">
+                                      {member.role !== "manager" && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setUpdatePasswordRole(member.role);
+                                            const inputEl = document.querySelector("input[placeholder='••••']") as HTMLInputElement;
+                                            if (inputEl) {
+                                              inputEl.focus();
+                                              inputEl.scrollIntoView({ behavior: "smooth", block: "center" });
+                                            }
+                                          }}
+                                          className="text-xs text-[#0B532B] dark:text-[#76C139] hover:underline bg-transparent border-none cursor-pointer"
+                                        >
+                                          تعديل الرمز ✏️
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* قائمة المشتركين الحاليين وإدارتهم */}

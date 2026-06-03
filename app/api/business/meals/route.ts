@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BusinessMealsDB } from "@/lib/db";
+import { BusinessMealsDB, PushSubscriptionDB } from "@/lib/db";
 import { cookies } from "next/headers";
+import { sendPushNotification } from "@/lib/webpush";
 
 async function getSession() {
   try {
@@ -48,6 +49,25 @@ export async function POST(request: NextRequest) {
       snacks: snacks.trim(),
       date,
     });
+
+    // Send push notification to Kitchen Supervisors and Managers
+    try {
+      const kitchenSubs = await PushSubscriptionDB.findByRole("kitchen");
+      const managerSubs = await PushSubscriptionDB.findByRole("manager");
+      const allSubs = [...kitchenSubs, ...managerSubs];
+
+      const payload = {
+        title: "تم تقديم وجبات الغد 🍳",
+        body: `قام الطباخ بتقديم وجبات الغد (${date})! يرجى الدخول والتحقق من توافر الطلبات.`,
+        url: "/business"
+      };
+
+      for (const sub of allSubs) {
+        await sendPushNotification(sub.subscription, payload);
+      }
+    } catch (pushError) {
+      console.error("Failed to send push notifications:", pushError);
+    }
 
     return NextResponse.json({ success: true, meals: item });
   } catch (error) {

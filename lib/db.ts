@@ -61,6 +61,16 @@ async function ensureDbInitialized() {
           `);
 
           await client.query(`
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+              id VARCHAR(50) PRIMARY KEY,
+              user_id VARCHAR(50) NOT NULL,
+              role VARCHAR(50) NOT NULL,
+              subscription TEXT NOT NULL,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          await client.query(`
             CREATE TABLE IF NOT EXISTS ingredients (
               id VARCHAR(50) PRIMARY KEY,
               name VARCHAR(100) NOT NULL,
@@ -337,7 +347,7 @@ export interface Notification {
   createdAt: string;
 }
 
-type Collection = "users" | "subscriptions" | "discountCodes" | "notifications" | "businessUsers" | "ingredients" | "subscribers" | "meals";
+type Collection = "users" | "subscriptions" | "discountCodes" | "notifications" | "businessUsers" | "ingredients" | "subscribers" | "meals" | "pushSubscriptions";
 
 function getFilePath(collection: Collection): string {
   return path.join(DB_PATH, `${collection}.json`);
@@ -1139,6 +1149,63 @@ export const BusinessMealsDB = {
     list[index] = { ...list[index], verifiedLunch, verifiedDinner, verifiedSnacks };
     await writeCollection("meals", list);
     return list[index];
+  }
+};
+
+export interface PushSubscriptionRecord {
+  id: string;
+  userId: string;
+  role: string;
+  subscription: string; // serialized JSON
+  updatedAt: string;
+}
+
+export const PushSubscriptionDB = {
+  save: async (userId: string, role: string, subscriptionStr: string): Promise<PushSubscriptionRecord> => {
+    const id = userId;
+    const updatedAt = new Date().toISOString();
+    const record: PushSubscriptionRecord = {
+      id,
+      userId,
+      role,
+      subscription: subscriptionStr,
+      updatedAt,
+    };
+    if (pool) {
+      await ensureDbInitialized();
+      await pool.query(
+        `INSERT INTO push_subscriptions (id, user_id, role, subscription, updated_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, subscription = EXCLUDED.subscription, updated_at = EXCLUDED.updated_at`,
+        [id, userId, role, subscriptionStr, new Date()]
+      );
+      return record;
+    }
+    const list = await readCollection<PushSubscriptionRecord>("pushSubscriptions");
+    const idx = list.findIndex(r => r.id === id);
+    if (idx > -1) {
+      list[idx] = record;
+    } else {
+      list.push(record);
+    }
+    await writeCollection("pushSubscriptions", list);
+    return record;
+  },
+  findByRole: async (role: string): Promise<PushSubscriptionRecord[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", role, subscription, updated_at as \"updatedAt\" FROM push_subscriptions WHERE role = $1", [role]);
+      return res.rows;
+    }
+    return (await readCollection<PushSubscriptionRecord>("pushSubscriptions")).filter(r => r.role === role);
+  },
+  findAll: async (): Promise<PushSubscriptionRecord[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", role, subscription, updated_at as \"updatedAt\" FROM push_subscriptions");
+      return res.rows;
+    }
+    return readCollection<PushSubscriptionRecord>("pushSubscriptions");
   }
 };
 

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     cookieStore.set("miqdar_business_session", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24, // 1 day
+      maxAge: 60 * 60 * 24 * 30, // 30 days
       path: "/",
     });
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const cookie = cookieStore.get("miqdar_business_session");
@@ -43,6 +43,31 @@ export async function GET() {
       return NextResponse.json({ authenticated: false });
     }
     const session = JSON.parse(Buffer.from(cookie.value, "base64").toString("utf-8"));
+    
+    // Check search params
+    const { searchParams } = new URL(request.url);
+    const all = searchParams.get("all");
+
+    if (all === "true" && session.role === "manager") {
+      const users = await BusinessUserDB.findAll();
+      const team = users.map((u) => {
+        let plainPin = "";
+        try {
+          plainPin = Buffer.from(u.pinCode, "base64").toString("utf-8").replace("_miqdar_salt", "");
+        } catch (e) {
+          plainPin = "????";
+        }
+        return {
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          pinCode: plainPin,
+          createdAt: u.createdAt
+        };
+      });
+      return NextResponse.json({ authenticated: true, user: session, team });
+    }
+
     return NextResponse.json({ authenticated: true, user: session });
   } catch {
     return NextResponse.json({ authenticated: false });
