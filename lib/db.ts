@@ -714,6 +714,19 @@ export const BusinessSubscriberDB = {
     if (list.length === 0) {
       await BusinessSubscriberDB.resetAll();
     }
+  },
+  delete: async (id: string): Promise<boolean> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("DELETE FROM subscribers WHERE id = $1", [id]);
+      return (res.rowCount ?? 0) > 0;
+    }
+    const list = readCollection<BusinessSubscriber>("subscribers");
+    const index = list.findIndex((s) => s.id === id);
+    if (index === -1) return false;
+    list.splice(index, 1);
+    writeCollection("subscribers", list);
+    return true;
   }
 };
 
