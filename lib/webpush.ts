@@ -14,7 +14,14 @@ webpush.setVapidDetails(
 export async function sendPushNotification(subscriptionStr: string, payload: { title: string; body: string; url?: string }) {
   try {
     const subscription = JSON.parse(subscriptionStr);
-    await webpush.sendNotification(subscription, JSON.stringify(payload));
+    const fullPayload = {
+      ...payload,
+      notification: {
+        title: payload.title,
+        body: payload.body
+      }
+    };
+    await webpush.sendNotification(subscription, JSON.stringify(fullPayload));
     return { success: true };
   } catch (error) {
     console.error("Web Push error:", error);
