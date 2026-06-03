@@ -78,7 +78,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "البيانات غير مكتملة أو غير صالحة" }, { status: 400 });
     }
 
-    if (!["kitchen", "purchaser", "delivery"].includes(role)) {
+    if (!["kitchen", "purchaser", "delivery", "cook"].includes(role)) {
       return NextResponse.json({ error: "الدور المحدد غير صالح" }, { status: 400 });
     }
 

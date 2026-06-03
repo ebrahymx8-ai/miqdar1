@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { Pool } from "pg";
+import { put, head } from "@vercel/blob";
 
 const DB_PATH = path.join(process.cwd(), "data");
 
@@ -33,8 +34,29 @@ async function ensureDbInitialized() {
               id VARCHAR(50) PRIMARY KEY,
               name VARCHAR(100) NOT NULL,
               pin_code VARCHAR(255) NOT NULL,
-              role VARCHAR(20) NOT NULL CHECK (role IN ('manager', 'kitchen', 'purchaser', 'delivery')),
+              role VARCHAR(20) NOT NULL CHECK (role IN ('manager', 'kitchen', 'purchaser', 'delivery', 'cook')),
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          try {
+            await client.query(`ALTER TABLE business_users DROP CONSTRAINT IF EXISTS business_users_role_check`);
+            await client.query(`ALTER TABLE business_users ADD CONSTRAINT business_users_role_check CHECK (role IN ('manager', 'kitchen', 'purchaser', 'delivery', 'cook'))`);
+          } catch (e) {
+            console.warn("Could not adjust check constraint for business_users role:", e);
+          }
+
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS meals (
+              id VARCHAR(50) PRIMARY KEY,
+              lunch TEXT NOT NULL,
+              dinner TEXT NOT NULL,
+              snacks TEXT NOT NULL,
+              date VARCHAR(50) NOT NULL,
+              verified_lunch BOOLEAN NOT NULL DEFAULT FALSE,
+              verified_dinner BOOLEAN NOT NULL DEFAULT FALSE,
+              verified_snacks BOOLEAN NOT NULL DEFAULT FALSE,
+              submitted_at VARCHAR(100) NOT NULL
             )
           `);
 
@@ -140,14 +162,16 @@ async function ensureDbInitialized() {
             const u2Pin = Buffer.from("2222" + salt).toString("base64");
             const u3Pin = Buffer.from("3333" + salt).toString("base64");
             const u4Pin = Buffer.from("4444" + salt).toString("base64");
+            const u5Pin = Buffer.from("5555" + salt).toString("base64");
 
             await client.query(`
               INSERT INTO business_users (id, name, pin_code, role) VALUES
               ('u1', 'مسؤول المطبخ', $1, 'kitchen'),
               ('u2', 'مندوب المقاضي', $2, 'purchaser'),
               ('u3', 'مندوب التوصيل', $3, 'delivery'),
-              ('u4', 'مدير المشروع', $4, 'manager')
-            `, [u1Pin, u2Pin, u3Pin, u4Pin]);
+              ('u4', 'مدير المشروع', $4, 'manager'),
+              ('u5', 'طباخ مقدار', $5, 'cook')
+            `, [u1Pin, u2Pin, u3Pin, u4Pin, u5Pin]);
           }
 
           const ingCount = await client.query("SELECT COUNT(*) FROM ingredients");
@@ -313,7 +337,7 @@ export interface Notification {
   createdAt: string;
 }
 
-type Collection = "users" | "subscriptions" | "discountCodes" | "notifications" | "businessUsers" | "ingredients" | "subscribers";
+type Collection = "users" | "subscriptions" | "discountCodes" | "notifications" | "businessUsers" | "ingredients" | "subscribers" | "meals";
 
 function getFilePath(collection: Collection): string {
   return path.join(DB_PATH, `${collection}.json`);
@@ -325,28 +349,19 @@ if (!(global as any).memoryCollections) {
   (global as any).memoryCollections = globalMemory;
 }
 
-function readCollection<T>(collection: Collection): T[] {
+async function readCollection<T>(collection: Collection): Promise<T[]> {
   if (!globalMemory[collection]) {
     globalMemory[collection] = [];
   }
 
-  const filePath = getFilePath(collection);
-  
-  // Try to ensure directory and files exist
-  try {
-    if (!fs.existsSync(filePath)) {
-      fs.mkdirSync(DB_PATH, { recursive: true });
-      fs.writeFileSync(filePath, "[]", "utf-8");
-    }
-  } catch (err) {
-    // Silently catch error on read-only filesystems like Vercel
-  }
+  const pathname = `data/${collection}.json`;
 
-  // Try to read from filesystem
+  // 1. Try to read from Vercel Blob
   try {
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, "utf-8");
-      const parsed = JSON.parse(raw) as T[];
+    const metadata = await head(pathname);
+    const response = await fetch(metadata.url);
+    if (response.ok) {
+      const parsed = await response.json() as T[];
       if (Array.isArray(parsed)) {
         // Merge with memory collection to ensure in-memory items are preserved
         const fileIds = new Set(parsed.map((item: any) => item.id).filter(Boolean));
@@ -361,22 +376,53 @@ function readCollection<T>(collection: Collection): T[] {
       }
     }
   } catch (err) {
-    // Fallback to memory on failure
+    // If Blob fails (e.g. not configured locally), fallback to local filesystem
+    try {
+      const filePath = getFilePath(collection);
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const parsed = JSON.parse(raw) as T[];
+        if (Array.isArray(parsed)) {
+          const fileIds = new Set(parsed.map((item: any) => item.id).filter(Boolean));
+          const combined = [...parsed];
+          for (const memItem of globalMemory[collection]) {
+            if (memItem && memItem.id && !fileIds.has(memItem.id)) {
+              combined.push(memItem);
+            }
+          }
+          globalMemory[collection] = combined;
+          return combined;
+        }
+      }
+    } catch (fsErr) {
+      // Ignore
+    }
   }
 
   return globalMemory[collection];
 }
 
-function writeCollection<T>(collection: Collection, data: T[]): void {
+async function writeCollection<T>(collection: Collection, data: T[]): Promise<void> {
   // Always update memory first
   globalMemory[collection] = data;
 
-  // Try to write to disk, catch EROFS silently on Vercel
+  const pathname = `data/${collection}.json`;
+
+  // 1. Try to write to Vercel Blob
   try {
-    fs.mkdirSync(DB_PATH, { recursive: true });
-    fs.writeFileSync(getFilePath(collection), JSON.stringify(data, null, 2), "utf-8");
+    await put(pathname, JSON.stringify(data, null, 2), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+    });
   } catch (err) {
-    console.warn(`Skipping writing collection ${collection} to file (read-only filesystem):`, err);
+    // Fallback to local file system write (catch EROFS silently on Vercel)
+    try {
+      fs.mkdirSync(DB_PATH, { recursive: true });
+      fs.writeFileSync(getFilePath(collection), JSON.stringify(data, null, 2), "utf-8");
+    } catch (fsErr) {
+      // Ignore EROFS
+    }
   }
 }
 
@@ -399,7 +445,7 @@ export const UserDB = {
       const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE id = $1", [id]);
       return res.rows[0];
     }
-    return readCollection<User>("users").find((u) => u.id === id);
+    return (await readCollection<User>("users")).find((u) => u.id === id);
   },
   findByPhone: async (phone: string): Promise<User | undefined> => {
     if (pool) {
@@ -407,7 +453,7 @@ export const UserDB = {
       const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE phone = $1", [phone]);
       return res.rows[0];
     }
-    return readCollection<User>("users").find((u) => u.phone === phone);
+    return (await readCollection<User>("users")).find((u) => u.phone === phone);
   },
   findByEmail: async (email: string): Promise<User | undefined> => {
     if (pool) {
@@ -415,7 +461,7 @@ export const UserDB = {
       const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE email = $1", [email]);
       return res.rows[0];
     }
-    return readCollection<User>("users").find((u) => u.email === email);
+    return (await readCollection<User>("users")).find((u) => u.email === email);
   },
   create: async (data: Omit<User, "id" | "createdAt">): Promise<User> => {
     if (pool) {
@@ -428,7 +474,7 @@ export const UserDB = {
       );
       return { ...data, id, createdAt };
     }
-    const users = readCollection<User>("users");
+    const users = await readCollection<User>("users");
     const user: User = { ...data, id: generateId(), createdAt: new Date().toISOString() };
     users.push(user);
     writeCollection("users", users);
@@ -450,7 +496,7 @@ export const UserDB = {
       );
       return res.rows[0] || null;
     }
-    const users = readCollection<User>("users");
+    const users = await readCollection<User>("users");
     const index = users.findIndex((u) => u.id === id);
     if (index === -1) return null;
     users[index] = { ...users[index], ...data };
@@ -474,7 +520,7 @@ export const SubscriptionDB = {
       const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE id = $1", [id]);
       return res.rows[0];
     }
-    return readCollection<Subscription>("subscriptions").find((s) => s.id === id);
+    return (await readCollection<Subscription>("subscriptions")).find((s) => s.id === id);
   },
   findByUserId: async (userId: string): Promise<Subscription[]> => {
     if (pool) {
@@ -482,7 +528,7 @@ export const SubscriptionDB = {
       const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE user_id = $1", [userId]);
       return res.rows;
     }
-    return readCollection<Subscription>("subscriptions").filter((s) => s.userId === userId);
+    return (await readCollection<Subscription>("subscriptions")).filter((s) => s.userId === userId);
   },
   findActive: async (userId: string): Promise<Subscription | undefined> => {
     if (pool) {
@@ -490,7 +536,7 @@ export const SubscriptionDB = {
       const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE user_id = $1 AND status = 'active'", [userId]);
       return res.rows[0];
     }
-    return readCollection<Subscription>("subscriptions").find((s) => s.userId === userId && s.status === "active");
+    return (await readCollection<Subscription>("subscriptions")).find((s) => s.userId === userId && s.status === "active");
   },
   create: async (data: Omit<Subscription, "id" | "createdAt" | "updatedAt">): Promise<Subscription> => {
     if (pool) {
@@ -505,7 +551,7 @@ export const SubscriptionDB = {
       );
       return { ...data, id, createdAt, updatedAt };
     }
-    const subs = readCollection<Subscription>("subscriptions");
+    const subs = await readCollection<Subscription>("subscriptions");
     const sub: Subscription = { ...data, id: generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     subs.push(sub);
     writeCollection("subscriptions", subs);
@@ -537,7 +583,7 @@ export const SubscriptionDB = {
       );
       return res.rows[0] || null;
     }
-    const subs = readCollection<Subscription>("subscriptions");
+    const subs = await readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return null;
     subs[index] = { ...subs[index], ...data, updatedAt: new Date().toISOString() };
@@ -555,7 +601,7 @@ export const SubscriptionDB = {
       await SubscriptionDB.update(id, { status: "frozen" });
       return { success: true, message: "تم تجميد الاشتراك بنجاح" };
     }
-    const subs = readCollection<Subscription>("subscriptions");
+    const subs = await readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return { success: false, message: "الاشتراك غير موجود" };
     if (subs[index].status !== "active") return { success: false, message: "الاشتراك غير نشط" };
@@ -574,7 +620,7 @@ export const SubscriptionDB = {
       await SubscriptionDB.update(id, { status: "active", frozenDays: sub.frozenDays + 1 });
       return { success: true, message: "تم استئناف الاشتراك بنجاح" };
     }
-    const subs = readCollection<Subscription>("subscriptions");
+    const subs = await readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return { success: false, message: "الاشتراك غير موجود" };
     if (subs[index].status !== "frozen") return { success: false, message: "الاشتراك ليس مجمداً" };
@@ -591,7 +637,7 @@ export const DiscountDB = {
       const res = await pool.query("SELECT id, code, percentage, is_active as \"isActive\", usage_count as \"usageCount\", affiliate_phone as \"affiliatePhone\", created_at as \"createdAt\" FROM discount_codes WHERE UPPER(code) = $1 AND is_active = true", [code.toUpperCase()]);
       return res.rows[0];
     }
-    return readCollection<DiscountCode>("discountCodes").find((d) => d.code.toUpperCase() === code.toUpperCase() && d.isActive);
+    return (await readCollection<DiscountCode>("discountCodes")).find((d) => d.code.toUpperCase() === code.toUpperCase() && d.isActive);
   },
   validate: async (code: string): Promise<{ valid: boolean; percentage: number; message: string }> => {
     const d = await DiscountDB.findByCode(code);
@@ -611,7 +657,7 @@ export const DiscountDB = {
       }
       return;
     }
-    const existing = readCollection<DiscountCode>("discountCodes");
+    const existing = await readCollection<DiscountCode>("discountCodes");
     if (existing.length === 0) {
       writeCollection("discountCodes", [
         { id: generateId(), code: "MIQDAR5", percentage: 5, isActive: true, usageCount: 0, createdAt: new Date().toISOString() },
@@ -634,7 +680,7 @@ export const NotificationDB = {
       );
       return { ...data, id, createdAt };
     }
-    const notifs = readCollection<Notification>("notifications");
+    const notifs = await readCollection<Notification>("notifications");
     const notif: Notification = { ...data, id: generateId(), createdAt: new Date().toISOString() };
     notifs.push(notif);
     writeCollection("notifications", notifs);
@@ -646,7 +692,7 @@ export const NotificationDB = {
       const res = await pool.query("SELECT id, user_id as \"userId\", subscription_id as \"subscriptionId\", type, channel, status, message, scheduled_at as \"scheduledAt\", sent_at as \"sentAt\", created_at as \"createdAt\" FROM notifications WHERE status = 'pending'");
       return res.rows;
     }
-    return readCollection<Notification>("notifications").filter((n) => n.status === "pending");
+    return (await readCollection<Notification>("notifications")).filter((n) => n.status === "pending");
   },
   markSent: async (id: string): Promise<void> => {
     if (pool) {
@@ -655,7 +701,7 @@ export const NotificationDB = {
       await pool.query("UPDATE notifications SET status = 'sent', sent_at = $2 WHERE id = $1", [id, sentAt]);
       return;
     }
-    const notifs = readCollection<Notification>("notifications");
+    const notifs = await readCollection<Notification>("notifications");
     const index = notifs.findIndex((n) => n.id === id);
     if (index !== -1) { notifs[index].status = "sent"; notifs[index].sentAt = new Date().toISOString(); writeCollection("notifications", notifs); }
   },
@@ -679,7 +725,7 @@ export interface BusinessUser {
   id: string;
   name: string;
   pinCode: string; // hashed/secure
-  role: "manager" | "kitchen" | "purchaser" | "delivery";
+  role: "manager" | "kitchen" | "purchaser" | "delivery" | "cook";
   createdAt: string;
 }
 
@@ -717,7 +763,7 @@ export const BusinessUserDB = {
       const res = await pool.query("SELECT id, name, pin_code as \"pinCode\", role, created_at as \"createdAt\" FROM business_users WHERE id = $1", [id]);
       return res.rows[0];
     }
-    return readCollection<BusinessUser>("businessUsers").find((u) => u.id === id);
+    return (await readCollection<BusinessUser>("businessUsers")).find((u) => u.id === id);
   },
   findByRole: async (role: string): Promise<BusinessUser[]> => {
     if (pool) {
@@ -725,7 +771,7 @@ export const BusinessUserDB = {
       const res = await pool.query("SELECT id, name, pin_code as \"pinCode\", role, created_at as \"createdAt\" FROM business_users WHERE role = $1", [role]);
       return res.rows;
     }
-    return readCollection<BusinessUser>("businessUsers").filter((u) => u.role === role);
+    return (await readCollection<BusinessUser>("businessUsers")).filter((u) => u.role === role);
   },
   findByPinCode: async (pinCode: string): Promise<BusinessUser | undefined> => {
     const hashed = Buffer.from(pinCode + "_miqdar_salt").toString("base64");
@@ -734,7 +780,7 @@ export const BusinessUserDB = {
       const res = await pool.query("SELECT id, name, pin_code as \"pinCode\", role, created_at as \"createdAt\" FROM business_users WHERE pin_code = $1", [hashed]);
       return res.rows[0];
     }
-    return readCollection<BusinessUser>("businessUsers").find((u) => u.pinCode === hashed);
+    return (await readCollection<BusinessUser>("businessUsers")).find((u) => u.pinCode === hashed);
   },
   create: async (data: Omit<BusinessUser, "id" | "createdAt">): Promise<BusinessUser> => {
     if (pool) {
@@ -747,10 +793,10 @@ export const BusinessUserDB = {
       );
       return { ...data, id, createdAt };
     }
-    const list = readCollection<BusinessUser>("businessUsers");
+    const list = await readCollection<BusinessUser>("businessUsers");
     const user: BusinessUser = { ...data, id: generateId(), createdAt: new Date().toISOString() };
     list.push(user);
-    writeCollection("businessUsers", list);
+    await writeCollection("businessUsers", list);
     return user;
   },
   seed: async (): Promise<void> => {
@@ -758,17 +804,18 @@ export const BusinessUserDB = {
       await ensureDbInitialized();
       return;
     }
-    const list = readCollection<BusinessUser>("businessUsers");
+    const list = await readCollection<BusinessUser>("businessUsers");
     if (list.length === 0) {
-      writeCollection("businessUsers", [
+      await writeCollection("businessUsers", [
         { id: "u1", name: "مسؤول المطبخ", pinCode: Buffer.from("1111" + "_miqdar_salt").toString("base64"), role: "kitchen", createdAt: new Date().toISOString() },
         { id: "u2", name: "مندوب المقاضي", pinCode: Buffer.from("2222" + "_miqdar_salt").toString("base64"), role: "purchaser", createdAt: new Date().toISOString() },
         { id: "u3", name: "مندوب التوصيل", pinCode: Buffer.from("3333" + "_miqdar_salt").toString("base64"), role: "delivery", createdAt: new Date().toISOString() },
         { id: "u4", name: "مدير المشروع", pinCode: Buffer.from("4444" + "_miqdar_salt").toString("base64"), role: "manager", createdAt: new Date().toISOString() },
+        { id: "u5", name: "طباخ مقدار", pinCode: Buffer.from("5555" + "_miqdar_salt").toString("base64"), role: "cook", createdAt: new Date().toISOString() },
       ]);
     }
   },
-  updatePinCode: async (role: "kitchen" | "purchaser" | "delivery", newPinCode: string): Promise<boolean> => {
+  updatePinCode: async (role: "kitchen" | "purchaser" | "delivery" | "cook", newPinCode: string): Promise<boolean> => {
     const hashed = Buffer.from(newPinCode + "_miqdar_salt").toString("base64");
     if (pool) {
       await ensureDbInitialized();
@@ -778,11 +825,11 @@ export const BusinessUserDB = {
       );
       return (res.rowCount ?? 0) > 0;
     }
-    const list = readCollection<BusinessUser>("businessUsers");
+    const list = await readCollection<BusinessUser>("businessUsers");
     const index = list.findIndex((u) => u.role === role);
     if (index === -1) return false;
     list[index] = { ...list[index], pinCode: hashed };
-    writeCollection("businessUsers", list);
+    await writeCollection("businessUsers", list);
     return true;
   }
 };
@@ -802,7 +849,7 @@ export const BusinessIngredientDB = {
       const res = await pool.query("SELECT id, name, category, status, last_updated as \"lastUpdated\", updated_by as \"updatedBy\" FROM ingredients WHERE id = $1", [id]);
       return res.rows[0];
     }
-    return readCollection<BusinessIngredient>("ingredients").find((i) => i.id === id);
+    return (await readCollection<BusinessIngredient>("ingredients")).find((i) => i.id === id);
   },
   create: async (data: Omit<BusinessIngredient, "id">): Promise<BusinessIngredient> => {
     if (pool) {
@@ -814,7 +861,7 @@ export const BusinessIngredientDB = {
       );
       return { ...data, id };
     }
-    const list = readCollection<BusinessIngredient>("ingredients");
+    const list = await readCollection<BusinessIngredient>("ingredients");
     const item: BusinessIngredient = { ...data, id: generateId() };
     list.push(item);
     writeCollection("ingredients", list);
@@ -830,7 +877,7 @@ export const BusinessIngredientDB = {
       );
       return res.rows[0] || null;
     }
-    const list = readCollection<BusinessIngredient>("ingredients");
+    const list = await readCollection<BusinessIngredient>("ingredients");
     const index = list.findIndex((i) => i.id === id);
     if (index === -1) return null;
     list[index] = { 
@@ -849,7 +896,7 @@ export const BusinessIngredientDB = {
       const res = await pool.query("SELECT id, name, category, status, last_updated as \"lastUpdated\", updated_by as \"updatedBy\" FROM ingredients ORDER BY created_at ASC");
       return res.rows;
     }
-    const list = readCollection<BusinessIngredient>("ingredients");
+    const list = await readCollection<BusinessIngredient>("ingredients");
     const updated = list.map((item) => ({ ...item, status: "فل" as const }));
     writeCollection("ingredients", updated);
     return updated;
@@ -859,7 +906,7 @@ export const BusinessIngredientDB = {
       await ensureDbInitialized();
       return;
     }
-    const list = readCollection<BusinessIngredient>("ingredients");
+    const list = await readCollection<BusinessIngredient>("ingredients");
     if (list.length === 0) {
       const initialList: Omit<BusinessIngredient, "id">[] = [
         // 1. البروتين
@@ -933,7 +980,7 @@ export const BusinessSubscriberDB = {
       const res = await pool.query("SELECT id, name, neighborhood, package_type as \"packageType\", delivery_status as \"deliveryStatus\", details, date FROM subscribers WHERE id = $1", [id]);
       return res.rows[0];
     }
-    return readCollection<BusinessSubscriber>("subscribers").find((s) => s.id === id);
+    return (await readCollection<BusinessSubscriber>("subscribers")).find((s) => s.id === id);
   },
   create: async (data: Omit<BusinessSubscriber, "id" | "date">): Promise<BusinessSubscriber> => {
     if (pool) {
@@ -946,7 +993,7 @@ export const BusinessSubscriberDB = {
       );
       return { ...data, id, date };
     }
-    const list = readCollection<BusinessSubscriber>("subscribers");
+    const list = await readCollection<BusinessSubscriber>("subscribers");
     const item: BusinessSubscriber = {
       ...data,
       id: generateId(),
@@ -965,7 +1012,7 @@ export const BusinessSubscriberDB = {
       );
       return res.rows[0] || null;
     }
-    const list = readCollection<BusinessSubscriber>("subscribers");
+    const list = await readCollection<BusinessSubscriber>("subscribers");
     const index = list.findIndex((s) => s.id === id);
     if (index === -1) return null;
     list[index] = { ...list[index], deliveryStatus };
@@ -1010,7 +1057,7 @@ export const BusinessSubscriberDB = {
       await ensureDbInitialized();
       return;
     }
-    const list = readCollection<BusinessSubscriber>("subscribers");
+    const list = await readCollection<BusinessSubscriber>("subscribers");
     if (list.length === 0) {
       await BusinessSubscriberDB.resetAll();
     }
@@ -1021,14 +1068,80 @@ export const BusinessSubscriberDB = {
       const res = await pool.query("DELETE FROM subscribers WHERE id = $1", [id]);
       return (res.rowCount ?? 0) > 0;
     }
-    const list = readCollection<BusinessSubscriber>("subscribers");
+    const list = await readCollection<BusinessSubscriber>("subscribers");
     const index = list.findIndex((s) => s.id === id);
     if (index === -1) return false;
     list.splice(index, 1);
-    writeCollection("subscribers", list);
+    await writeCollection("subscribers", list);
     return true;
   }
 };
+
+export interface BusinessMealSubmission {
+  id: string;
+  lunch: string;
+  dinner: string;
+  snacks: string;
+  date: string; // e.g. "2026-06-04"
+  verifiedLunch: boolean;
+  verifiedDinner: boolean;
+  verifiedSnacks: boolean;
+  submittedAt: string;
+}
+
+export const BusinessMealsDB = {
+  findLatest: async (): Promise<BusinessMealSubmission | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\" FROM meals ORDER BY submitted_at DESC LIMIT 1");
+      return res.rows[0];
+    }
+    const list = await readCollection<BusinessMealSubmission>("meals");
+    if (list.length === 0) return undefined;
+    return list[list.length - 1];
+  },
+  create: async (data: Omit<BusinessMealSubmission, "id" | "verifiedLunch" | "verifiedDinner" | "verifiedSnacks" | "submittedAt">): Promise<BusinessMealSubmission> => {
+    const submittedAt = new Date().toISOString();
+    const id = generateId();
+    const item: BusinessMealSubmission = {
+      ...data,
+      id,
+      verifiedLunch: false,
+      verifiedDinner: false,
+      verifiedSnacks: false,
+      submittedAt,
+    };
+    if (pool) {
+      await ensureDbInitialized();
+      await pool.query(
+        "INSERT INTO meals (id, lunch, dinner, snacks, date, verified_lunch, verified_dinner, verified_snacks, submitted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        [id, item.lunch, item.dinner, item.snacks, item.date, item.verifiedLunch, item.verifiedDinner, item.verifiedSnacks, item.submittedAt]
+      );
+      return item;
+    }
+    const list = await readCollection<BusinessMealSubmission>("meals");
+    list.push(item);
+    await writeCollection("meals", list);
+    return item;
+  },
+  updateVerification: async (id: string, verifiedLunch: boolean, verifiedDinner: boolean, verifiedSnacks: boolean): Promise<BusinessMealSubmission | null> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query(
+        "UPDATE meals SET verified_lunch = $1, verified_dinner = $2, verified_snacks = $3 WHERE id = $4 RETURNING id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\"",
+        [verifiedLunch, verifiedDinner, verifiedSnacks, id]
+      );
+      return res.rows[0] || null;
+    }
+    const list = await readCollection<BusinessMealSubmission>("meals");
+    const index = list.findIndex((m) => m.id === id);
+    if (index === -1) return null;
+    list[index] = { ...list[index], verifiedLunch, verifiedDinner, verifiedSnacks };
+    await writeCollection("meals", list);
+    return list[index];
+  }
+};
+
 
 // Seed business db if empty
 if (typeof window === "undefined") {

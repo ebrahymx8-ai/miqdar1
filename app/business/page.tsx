@@ -38,11 +38,11 @@ export default function MiqdarBusinessPage() {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [pinCode, setPinCode] = useState<string>("");
-  const [currentUserRole, setCurrentUserRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook" | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Dashboard Role State: 'manager' | 'kitchen' | 'purchaser' | 'delivery'
-  const [activeRole, setActiveRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery">("manager");
+  // Dashboard Role State: 'manager' | 'kitchen' | 'purchaser' | 'delivery' | 'cook'
+  const [activeRole, setActiveRole] = useState<"manager" | "kitchen" | "purchaser" | "delivery" | "cook">("manager");
 
   // Kitchen Category filter
   const [selectedKitchenCategory, setSelectedKitchenCategory] = useState<string>("الكل");
@@ -70,9 +70,17 @@ export default function MiqdarBusinessPage() {
   const [ingredientFormError, setIngredientFormError] = useState<string | null>(null);
 
   // Form State for managing member passwords
-  const [updatePasswordRole, setUpdatePasswordRole] = useState<"kitchen" | "purchaser" | "delivery">("kitchen");
+  const [updatePasswordRole, setUpdatePasswordRole] = useState<"kitchen" | "purchaser" | "delivery" | "cook">("kitchen");
   const [newMemberPin, setNewMemberPin] = useState<string>("");
   const [passwordFormError, setPasswordFormError] = useState<string | null>(null);
+
+  // Cook Form & Meals State
+  const [cookLunch, setCookLunch] = useState<string>("");
+  const [cookDinner, setCookDinner] = useState<string>("");
+  const [cookSnacks, setCookSnacks] = useState<string>("");
+  const [cookDate, setCookDate] = useState<string>("");
+  const [latestMeals, setLatestMeals] = useState<any | null>(null);
+  const [mealsError, setMealsError] = useState<string | null>(null);
 
   // Activity Log State
   const [logs, setLogs] = useState<ActivityLog[]>([
@@ -83,10 +91,14 @@ export default function MiqdarBusinessPage() {
   // Toast Notification state
   const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: "", show: false });
 
-  // Sync theme with HTML tag
+  // Sync theme and set default cook date to tomorrow
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
     setTheme(isDark ? "dark" : "light");
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setCookDate(tomorrow.toISOString().split("T")[0]);
   }, []);
 
   // Fetch all business database records
@@ -113,6 +125,15 @@ export default function MiqdarBusinessPage() {
           details: s.details,
         }));
         setOrders(mappedOrders);
+      }
+
+      // 3. Fetch latest meals
+      const mealsResponse = await fetch("/api/business/meals");
+      const mealsData = await mealsResponse.json();
+      if (mealsResponse.ok && mealsData.meals) {
+        setLatestMeals(mealsData.meals);
+      } else {
+        setLatestMeals(null);
       }
     } catch (error) {
       console.error("Error fetching database data:", error);
@@ -471,6 +492,7 @@ export default function MiqdarBusinessPage() {
         if (updatePasswordRole === "kitchen") roleNameAr = "مسؤول المطبخ";
         else if (updatePasswordRole === "purchaser") roleNameAr = "مندوب المقاضي";
         else if (updatePasswordRole === "delivery") roleNameAr = "مندوب التوصيل";
+        else if (updatePasswordRole === "cook") roleNameAr = "طباخ مقدار";
 
         const newLog: ActivityLog = {
           id: Date.now().toString(),
@@ -522,6 +544,103 @@ export default function MiqdarBusinessPage() {
       showToast("❌ خطأ في الاتصال بالخادم");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Cook Actions: Submit tomorrow's meals
+  const handleSubmitMeals = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMealsError(null);
+    if (!cookLunch.trim() || !cookDinner.trim() || !cookSnacks.trim() || !cookDate) {
+      setMealsError("يرجى تعبئة جميع خانات الوجبات والتاريخ.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/business/meals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lunch: cookLunch.trim(),
+          dinner: cookDinner.trim(),
+          snacks: cookSnacks.trim(),
+          date: cookDate,
+        }),
+      });
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setLatestMeals(data.meals);
+        setCookLunch("");
+        setCookDinner("");
+        setCookSnacks("");
+        showToast("🍳 تم تقديم وجبات الغد بنجاح وإرسالها للمشرف!");
+        
+        const newLog: ActivityLog = {
+          id: Date.now().toString(),
+          time: getCurrentTime(),
+          text: `الطباخ: تم تقديم قائمة وجبات الغد لتاريخ (${cookDate}).`,
+          type: "kitchen",
+        };
+        setLogs((prev) => [newLog, ...prev]);
+      } else {
+        setMealsError(data.error || "فشل إرسال الوجبات");
+        showToast("❌ فشل تقديم الوجبات");
+      }
+    } catch {
+      setMealsError("خطأ في الاتصال بالخادم");
+      showToast("❌ خطأ في الاتصال");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Kitchen Supervisor Actions: Verify meal item availability
+  const handleVerifyMealItem = async (mealType: "lunch" | "dinner" | "snacks", checked: boolean) => {
+    if (!latestMeals) return;
+
+    // optimistic update
+    const updatedMeals = { ...latestMeals };
+    if (mealType === "lunch") updatedMeals.verifiedLunch = checked;
+    if (mealType === "dinner") updatedMeals.verifiedDinner = checked;
+    if (mealType === "snacks") updatedMeals.verifiedSnacks = checked;
+
+    setLatestMeals(updatedMeals);
+
+    try {
+      const response = await fetch("/api/business/meals", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: latestMeals.id,
+          verifiedLunch: updatedMeals.verifiedLunch,
+          verifiedDinner: updatedMeals.verifiedDinner,
+          verifiedSnacks: updatedMeals.verifiedSnacks,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setLatestMeals(data.meals);
+        showToast("✓ تم تحديث حالة التحقق من الوجبة");
+        
+        const typeAr = mealType === "lunch" ? "الغداء" : mealType === "dinner" ? "العشاء" : "السناك";
+        const statusAr = checked ? "متوفر" : "غير متوفر";
+        const newLog: ActivityLog = {
+          id: Date.now().toString(),
+          time: getCurrentTime(),
+          text: `المطبخ: تحديث حالة توافر وجبة ${typeAr} إلى (${statusAr}).`,
+          type: "kitchen",
+        };
+        setLogs((prev) => [newLog, ...prev]);
+      } else {
+        showToast(`❌ فشل تحديث حالة التحقق: ${data.error}`);
+        // revert
+        setLatestMeals(latestMeals);
+      }
+    } catch {
+      showToast("❌ خطأ في الاتصال بالخادم");
+      setLatestMeals(latestMeals);
     }
   };
 
@@ -705,6 +824,7 @@ export default function MiqdarBusinessPage() {
               {currentUserRole === "purchaser" && "🛒 مندوب المقاضي"}
               {currentUserRole === "delivery" && "🚚 مندوب التوصيل"}
               {currentUserRole === "manager" && "👑 مدير المشروع"}
+              {currentUserRole === "cook" && "👨‍🍳 طباخ مقدار"}
             </p>
           </div>
 
@@ -748,6 +868,22 @@ export default function MiqdarBusinessPage() {
                     {activeShortages}
                   </span>
                 )}
+              </button>
+            )}
+
+            {(currentUserRole === "manager" || currentUserRole === "cook") && (
+              <button
+                onClick={() => { setActiveRole("cook"); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right font-bold transition-all duration-300 ${
+                  activeRole === "cook"
+                    ? "bg-[#76C139] text-[#0B532B] shadow-md scale-[1.02]"
+                    : "hover:bg-white/5 text-white/80 hover:text-white"
+                }`}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span>قسم الطباخ</span>
               </button>
             )}
 
@@ -860,6 +996,11 @@ export default function MiqdarBusinessPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               )}
+              {activeRole === "cook" && (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              )}
               {activeRole === "purchaser" && (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -875,12 +1016,14 @@ export default function MiqdarBusinessPage() {
               <h2 className="font-extrabold text-lg md:text-xl text-[#0B532B] dark:text-zinc-50">
                 {activeRole === "manager" && "لوحة تحكم مدير المشروع"}
                 {activeRole === "kitchen" && "قسم المطبخ والإنتاج"}
+                {activeRole === "cook" && "قسم الطباخ وإعداد الوجبات"}
                 {activeRole === "purchaser" && "قسم التجهيز ومشتريات المقاضي"}
                 {activeRole === "delivery" && "قسم التوزيع وتوصيل الطلبات"}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 {activeRole === "manager" && "إدارة النواقص، إحصائيات حية وسجل عمليات التوصيل."}
                 {activeRole === "kitchen" && "تسجيل وتتبع نقص المواد الأساسية ومستلزمات الإنتاج."}
+                {activeRole === "cook" && "تقديم قوائم وجبات الغد (الغداء، العشاء، وسناك الغد) للمشرفين."}
                 {activeRole === "purchaser" && "شراء المواد الناقصة فورياً وتوريدها للمطبخ."}
                 {activeRole === "delivery" && "متابعة مسارات التوزيع اليومية في أحياء مكة المكرمة."}
               </p>
@@ -1451,6 +1594,120 @@ export default function MiqdarBusinessPage() {
                 </div>
               </div>
 
+              {/* قائمة التحقق من توافر وجبات الغد */}
+              <div className="bg-white dark:bg-zinc-900 border border-[#76C139]/10 rounded-3xl p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                  <div>
+                    <h3 className="font-extrabold text-base text-[#0B532B] dark:text-zinc-100">
+                      قائمة التحقق من توافر وجبات الغد 📋
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      تحقق من وجود كامل المكونات المطلوبة في المستودع لكل وجبة تم تقديمها من الطباخ.
+                    </p>
+                  </div>
+                  {latestMeals && (
+                    <span className="text-xs bg-[#76C139]/10 text-[#0B532B] dark:text-[#76C139] px-2.5 py-1 rounded-full font-bold">
+                      التاريخ المستهدف: {latestMeals.date}
+                    </span>
+                  )}
+                </div>
+
+                {!latestMeals ? (
+                  <div className="py-6 text-center text-xs text-zinc-500">
+                    ⏳ لم يقم الطباخ برفع قائمة الوجبات ليوم الغد بعد.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* غداء الغد */}
+                    <div className={`p-4 rounded-2xl border transition-all ${
+                      latestMeals.verifiedLunch
+                        ? "border-[#76C139]/40 bg-[#76C139]/5 dark:bg-[#76C139]/5"
+                        : "border-zinc-200 dark:border-zinc-800"
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-zinc-400 font-bold">غداء الغد</span>
+                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-relaxed">
+                            {latestMeals.lunch}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={latestMeals.verifiedLunch}
+                            onChange={(e) => handleVerifyMealItem("lunch", e.target.checked)}
+                            className="w-5 h-5 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                            المكونات متوفرة في المستودع
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* عشاء الغد */}
+                    <div className={`p-4 rounded-2xl border transition-all ${
+                      latestMeals.verifiedDinner
+                        ? "border-[#76C139]/40 bg-[#76C139]/5 dark:bg-[#76C139]/5"
+                        : "border-zinc-200 dark:border-zinc-800"
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-zinc-400 font-bold">عشاء الغد</span>
+                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-relaxed">
+                            {latestMeals.dinner}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={latestMeals.verifiedDinner}
+                            onChange={(e) => handleVerifyMealItem("dinner", e.target.checked)}
+                            className="w-5 h-5 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                            المكونات متوفرة في المستودع
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* سناك الغد */}
+                    <div className={`p-4 rounded-2xl border transition-all ${
+                      latestMeals.verifiedSnacks
+                        ? "border-[#76C139]/40 bg-[#76C139]/5 dark:bg-[#76C139]/5"
+                        : "border-zinc-200 dark:border-zinc-800"
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-zinc-400 font-bold">سناك الغد</span>
+                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-relaxed">
+                            {latestMeals.snacks}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={latestMeals.verifiedSnacks}
+                            onChange={(e) => handleVerifyMealItem("snacks", e.target.checked)}
+                            className="w-5 h-5 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                            المكونات متوفرة في المستودع
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Category Filtering Tabs */}
               <div className="flex gap-2 overflow-x-auto pb-3 pt-2 scrollbar-none">
                 {["الكل", "البروتين", "الخضروات والورقيات", "النشويات والكربوهيدرات", "الألبان والأجبان", "الزيوت والصوصات", "البهارات والتوابل"].map((cat) => (
@@ -1692,6 +1949,138 @@ export default function MiqdarBusinessPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* 5. COOK VIEW */}
+          {activeRole === "cook" && (currentUserRole === "manager" || currentUserRole === "cook") && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-zinc-900 border border-[#76C139]/10 p-6 rounded-3xl shadow-sm">
+                <h3 className="font-extrabold text-base text-[#0B532B] dark:text-zinc-100">
+                  نموذج تقديم وجبات الغد الصحّية 🍳
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                  قم بتسجيل وتعبئة الوجبات المقترحة ليوم غدٍ ليقوم مسؤول المطبخ بمراجعتها والتحقق من توفر كامل المكونات والطلبات المطلوبة.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2">
+                  <div className="bg-white dark:bg-zinc-900 border border-[#76C139]/10 rounded-3xl p-6 space-y-6 shadow-sm">
+                    <form onSubmit={handleSubmitMeals} className="space-y-6">
+                      {mealsError && (
+                        <div className="bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2 border border-red-200/50">
+                          <span>⚠️</span>
+                          <span>{mealsError}</span>
+                        </div>
+                      )}
+
+                      {/* تاريخ الوجبات */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          تاريخ وجبات الغد <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={cookDate}
+                          onChange={(e) => setCookDate(e.target.value)}
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          required
+                        />
+                      </div>
+
+                      {/* غداء الغد */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          غداء الغد (غداء الغد) <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={cookLunch}
+                          onChange={(e) => setCookLunch(e.target.value)}
+                          placeholder="مثال: صدور دجاج مشوي مع أرز أبيض صيني وخضار سوتيه"
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          required
+                        />
+                      </div>
+
+                      {/* عشاء الغد */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          عشاء الغد (عشاء الغد) <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={cookDinner}
+                          onChange={(e) => setCookDinner(e.target.value)}
+                          placeholder="مثال: لحم مفروم مشوي مع برغل ناعم وسلطة خضراء"
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          required
+                        />
+                      </div>
+
+                      {/* سناك الغد */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                          سناك الغد (سناك الغد) <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={cookSnacks}
+                          onChange={(e) => setCookSnacks(e.target.value)}
+                          placeholder="مثال: زبادي يوناني مع حبات الرمان الطازج وعسل"
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          required
+                        />
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="submit"
+                          className="w-full sm:w-auto bg-[#0B532B] hover:bg-[#07361c] text-white font-bold px-6 py-3.5 rounded-xl transition-all duration-200 shadow-sm text-sm cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                        >
+                          <span>إرسال قائمة وجبات الغد لمشرف المطبخ</span>
+                          <span>🍳</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                {/* عرض آخر القوائم المقدمة */}
+                <div className="space-y-6">
+                  <div className="bg-white dark:bg-zinc-900 border border-[#76C139]/10 rounded-3xl p-6 shadow-sm">
+                    <h4 className="font-extrabold text-sm text-[#0B532B] dark:text-zinc-100 pb-3 border-b border-zinc-100 dark:border-zinc-800 mb-4">
+                      آخر قائمة وجبات مقدمة 📋
+                    </h4>
+                    {latestMeals ? (
+                      <div className="space-y-4 text-right">
+                        <div className="bg-[#F7F6EC]/60 dark:bg-zinc-800/40 p-3 rounded-xl">
+                          <p className="text-[10px] text-zinc-400 font-bold">تاريخ الوجبات:</p>
+                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{latestMeals.date}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-zinc-400 font-bold">غداء الغد:</p>
+                          <p className="text-xs text-zinc-700 dark:text-zinc-350 bg-zinc-50 dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800">{latestMeals.lunch}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-zinc-400 font-bold">عشاء الغد:</p>
+                          <p className="text-xs text-zinc-700 dark:text-zinc-350 bg-zinc-50 dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800">{latestMeals.dinner}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-zinc-400 font-bold">سناك الغد:</p>
+                          <p className="text-xs text-zinc-700 dark:text-zinc-350 bg-zinc-50 dark:bg-zinc-800 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800">{latestMeals.snacks}</p>
+                        </div>
+                        <div className="pt-2 text-[10px] text-zinc-400">
+                          قدمت بتاريخ: {new Date(latestMeals.submittedAt).toLocaleString("ar-SA")}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500 text-center py-4">لا توجد وجبات مسجلة حالياً.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
