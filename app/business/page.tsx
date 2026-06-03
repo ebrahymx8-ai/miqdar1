@@ -32,6 +32,9 @@ export default function MiqdarBusinessPage() {
   // Theme state
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
+  // Mobile menu sidebar drawer open state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [pinCode, setPinCode] = useState<string>("");
@@ -208,6 +211,7 @@ export default function MiqdarBusinessPage() {
       setLoginError(null);
       setIngredients([]);
       setOrders([]);
+      setIsMobileMenuOpen(false);
       showToast("🔓 تم تسجيل الخروج بنجاح");
     } catch (error) {
       console.error("Logout error:", error);
@@ -488,6 +492,39 @@ export default function MiqdarBusinessPage() {
     }
   };
 
+  // Delete subscriber handler (Database Integration)
+  const handleDeleteSubscriber = async (id: string, name: string) => {
+    if (!confirm(`هل أنت متأكد من رغبتك في حذف المشترك (${name})؟`)) {
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/business/subscribers?id=${id}`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setOrders((prev) => prev.filter((order) => order.id !== id));
+        const newLog: ActivityLog = {
+          id: Date.now().toString(),
+          time: getCurrentTime(),
+          text: `مدير المشروع: تم حذف المشترك (${name}) من قاعدة البيانات.`,
+          type: "system",
+        };
+        setLogs((prev) => [newLog, ...prev]);
+        showToast(`🗑️ تم حذف المشترك ${name} بنجاح!`);
+      } else {
+        showToast(`❌ فشل حذف المشترك: ${data.error}`);
+      }
+    } catch {
+      showToast("❌ خطأ في الاتصال بالخادم");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Calculate live stats for PM view
   const activeShortages = ingredients.filter((item) => item.status === "ناقص").length;
   const totalDeliveries = orders.length;
@@ -608,27 +645,53 @@ export default function MiqdarBusinessPage() {
         </div>
       )}
 
+      {/* Mobile Sidebar Drawer Backdrop */}
+      {isMobileMenuOpen && (
+        <div
+          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-zinc-950/60 backdrop-blur-xs z-30 md:hidden animate-fade-in"
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-72 bg-[#0B532B] text-white flex flex-col justify-between flex-shrink-0 border-l border-[#76C139]/20 shadow-xl z-20">
+      <aside
+        className={`fixed inset-y-0 right-0 z-40 w-72 bg-[#0B532B] text-white flex flex-col justify-between flex-shrink-0 border-l border-[#76C139]/20 shadow-2xl transition-transform duration-300 md:sticky md:top-0 md:h-screen md:translate-x-0 ${
+          isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div>
           {/* Logo Brand Header */}
-          <div className="p-4 border-b border-white/10 flex items-center gap-3">
-            <div className="relative w-12 h-12 rounded-xl bg-[#F7F6EC] p-1 flex items-center justify-center flex-shrink-0 shadow-inner">
-              <Image
-                src="/logo.jpg"
-                alt="شعار مقدار"
-                width={40}
-                height={40}
-                className="object-contain rounded-lg"
-              />
+          <div className="p-4 border-b border-white/10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative w-12 h-12 rounded-xl bg-[#F7F6EC] p-1 flex items-center justify-center flex-shrink-0 shadow-inner">
+                <Image
+                  src="/logo.jpg"
+                  alt="شعار مقدار"
+                  width={40}
+                  height={40}
+                  className="object-contain rounded-lg"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-black text-sm tracking-wide text-white">مقدار أعمال</span>
+                <span className="text-[10px] text-[#76C139] font-bold">باقات الشركات B2B</span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <span className="font-black text-sm tracking-wide text-white">مقدار أعمال</span>
-              <span className="text-[10px] text-[#76C139] font-bold">باقات الشركات B2B</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] bg-[#E7792B] text-white font-bold px-1.5 py-0.5 rounded-full select-none shadow shrink-0">
+                تجريبي
+              </span>
+              {/* Close Button on Mobile Drawer */}
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 md:hidden rounded-lg bg-white/10 hover:bg-white/20 transition-all text-white cursor-pointer"
+                aria-label="إغلاق القائمة"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <span className="mr-auto text-[9px] bg-[#E7792B] text-white font-bold px-1.5 py-0.5 rounded-full select-none shadow shrink-0">
-              تجريبي
-            </span>
           </div>
 
           {/* User Profile Info */}
@@ -653,7 +716,7 @@ export default function MiqdarBusinessPage() {
 
             {currentUserRole === "manager" && (
               <button
-                onClick={() => setActiveRole("manager")}
+                onClick={() => { setActiveRole("manager"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right font-bold transition-all duration-300 ${
                   activeRole === "manager"
                     ? "bg-[#76C139] text-[#0B532B] shadow-md scale-[1.02]"
@@ -669,7 +732,7 @@ export default function MiqdarBusinessPage() {
 
             {(currentUserRole === "manager" || currentUserRole === "kitchen") && (
               <button
-                onClick={() => setActiveRole("kitchen")}
+                onClick={() => { setActiveRole("kitchen"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right font-bold transition-all duration-300 ${
                   activeRole === "kitchen"
                     ? "bg-[#76C139] text-[#0B532B] shadow-md scale-[1.02]"
@@ -690,7 +753,7 @@ export default function MiqdarBusinessPage() {
 
             {(currentUserRole === "manager" || currentUserRole === "purchaser") && (
               <button
-                onClick={() => setActiveRole("purchaser")}
+                onClick={() => { setActiveRole("purchaser"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right font-bold transition-all duration-300 ${
                   activeRole === "purchaser"
                     ? "bg-[#76C139] text-[#0B532B] shadow-md scale-[1.02]"
@@ -711,7 +774,7 @@ export default function MiqdarBusinessPage() {
 
             {(currentUserRole === "manager" || currentUserRole === "delivery") && (
               <button
-                onClick={() => setActiveRole("delivery")}
+                onClick={() => { setActiveRole("delivery"); setIsMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right font-bold transition-all duration-300 ${
                   activeRole === "delivery"
                     ? "bg-[#76C139] text-[#0B532B] shadow-md scale-[1.02]"
@@ -775,6 +838,17 @@ export default function MiqdarBusinessPage() {
         {/* Top Header */}
         <header className="bg-white dark:bg-zinc-900 border-b border-[#76C139]/10 p-5 flex items-center justify-between sticky top-0 z-10 shadow-sm transition-colors duration-300">
           <div className="flex items-center gap-3">
+            {/* Hamburger Button on Mobile */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 md:hidden rounded-xl bg-[#0B532B]/5 text-[#0B532B] dark:bg-zinc-800 dark:text-[#76C139] hover:bg-[#0B532B]/10 transition-colors cursor-pointer"
+              aria-label="افتح القائمة"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+
             <div className="p-2 bg-[#0B532B]/10 dark:bg-zinc-800 rounded-xl text-[#0B532B] dark:text-[#76C139]">
               {activeRole === "manager" && (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -1193,6 +1267,71 @@ export default function MiqdarBusinessPage() {
                         </button>
                       </div>
                     </form>
+                  </div>
+
+                  {/* قائمة المشتركين الحاليين وإدارتهم */}
+                  <div className="bg-white dark:bg-zinc-900 border border-[#76C139]/10 rounded-3xl p-6 space-y-6 shadow-sm">
+                    <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                      <div>
+                        <h3 className="font-extrabold text-base text-[#0B532B] dark:text-zinc-100">
+                          قائمة المشتركين الحاليين 👤
+                        </h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          عرض وتعديل كافة المشتركين المسجلين في مكة المكرمة مع إمكانية حذف الحسابات التجريبية.
+                        </p>
+                      </div>
+                      <span className="text-xs bg-[#0B532B]/10 text-[#0B532B] dark:bg-[#76C139]/10 dark:text-[#76C139] px-2.5 py-1 rounded-full font-bold">
+                        {orders.length} مشتركين
+                      </span>
+                    </div>
+
+                    {orders.length === 0 ? (
+                      <p className="text-xs text-zinc-500 text-center py-4">لا يوجد مشتركين مسجلين حالياً.</p>
+                    ) : (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full text-right border-collapse">
+                          <thead>
+                            <tr className="border-b border-zinc-100 dark:border-zinc-800 text-xs font-bold text-zinc-500">
+                              <th className="pb-3 pr-2">الاسم</th>
+                              <th className="pb-3">الحي</th>
+                              <th className="pb-3">الباقة</th>
+                              <th className="pb-3">الحالة</th>
+                              <th className="pb-3 text-left pl-2">العمليات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
+                            {orders.map((order) => (
+                              <tr key={order.id} className="text-xs text-zinc-700 dark:text-zinc-300">
+                                <td className="py-3 pr-2 font-bold text-zinc-900 dark:text-zinc-50">{order.customerName}</td>
+                                <td className="py-3">{order.region}</td>
+                                <td className="py-3 max-w-[120px] truncate">{order.packageType}</td>
+                                <td className="py-3">
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    order.status === "تم التوصيل"
+                                      ? "bg-[#76C139]/10 text-[#0B532B] dark:bg-[#76C139]/10 dark:text-[#76C139]"
+                                      : "bg-orange-100 text-[#E7792B] dark:bg-orange-950/30 dark:text-orange-400"
+                                  }`}>
+                                    {order.status}
+                                  </span>
+                                </td>
+                                <td className="py-3 text-left pl-2">
+                                  <button
+                                    onClick={() => handleDeleteSubscriber(order.id, order.customerName)}
+                                    className="bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 text-red-650 hover:text-red-700 p-2 rounded-lg transition-colors cursor-pointer"
+                                    title="حذف المشترك"
+                                    aria-label="حذف المشترك"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
 
