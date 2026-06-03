@@ -46,14 +46,64 @@ export async function POST(request: NextRequest) {
       activityLevel,
     });
 
-    // Create Business Subscriber record for internal business tracking
-    await BusinessSubscriberDB.create({
-      name: name.trim(),
-      neighborhood: "العزيزية", // Default neighborhood for new online registrations
-      packageType: "حياة يومية (وجبة وسناك)", // Default package type
-      deliveryStatus: "قيد التوصيل",
-      details: `مسجل عبر الموقع الإلكتروني - هاتف: ${cleanPhone}`,
-    });
+    // Save subscriber directly to subscribers.json to avoid database/connection conflicts
+    let subscribers = [];
+    try {
+      const fileContent = fs.readFileSync(subscribersFile, "utf-8");
+      subscribers = JSON.parse(fileContent);
+      if (!Array.isArray(subscribers)) {
+        subscribers = [];
+      }
+    } catch (e) {
+      subscribers = [];
+    }
+
+    // Avoid duplicate subscriber entry in subscribers.json
+    const exists = subscribers.some(
+      (sub: any) =>
+        sub.name === name.trim() ||
+        (sub.details && sub.details.includes(cleanPhone))
+    );
+
+    if (!exists) {
+      let newId = "";
+      const numericIds = subscribers
+        .map((s: any) => parseInt(s.id, 10))
+        .filter((id: number) => !isNaN(id));
+      if (numericIds.length > 0) {
+        newId = (Math.max(...numericIds) + 1).toString();
+      } else {
+        newId = "100" + (subscribers.length + 1);
+      }
+
+      const newSubscriber = {
+        id: newId,
+        name: name.trim(),
+        neighborhood: "العزيزية", // Default neighborhood for new online registrations
+        packageType: "حياة يومية (وجبة وسناك)", // Default package type
+        deliveryStatus: "قيد التوصيل",
+        details: `مسجل عبر الموقع الإلكتروني - هاتف: ${cleanPhone}`,
+        date: new Date().toISOString().split("T")[0]
+      };
+
+      subscribers.push(newSubscriber);
+      fs.writeFileSync(subscribersFile, JSON.stringify(subscribers, null, 2), "utf-8");
+    }
+
+    // Create Business Subscriber record in external DB if configured
+    if (process.env.DATABASE_URL) {
+      try {
+        await BusinessSubscriberDB.create({
+          name: name.trim(),
+          neighborhood: "العزيزية",
+          packageType: "حياة يومية (وجبة وسناك)",
+          deliveryStatus: "قيد التوصيل",
+          details: `مسجل عبر الموقع الإلكتروني - هاتف: ${cleanPhone}`,
+        });
+      } catch (dbError) {
+        console.error("Could not save to BusinessSubscriberDB (Postgres):", dbError);
+      }
+    }
 
     // Create session
     const sessionData = { userId: user.id, name: user.name, phone: user.phone, email: user.email };
