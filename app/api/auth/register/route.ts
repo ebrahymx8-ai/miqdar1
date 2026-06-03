@@ -2,9 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserDB, BusinessSubscriberDB } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { cookies } from "next/headers";
+import fs from "fs";
+import path from "path";
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure the data directory and subscribers.json file exist to prevent server errors
+    const dataDir = path.join(process.cwd(), "data");
+    const subscribersFile = path.join(dataDir, "subscribers.json");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (!fs.existsSync(subscribersFile)) {
+      fs.writeFileSync(subscribersFile, "[]", "utf-8");
+    }
+
     const body = await request.json();
     const { name, phone, email, password, gender, age, weight, height, activityLevel } = body;
 
