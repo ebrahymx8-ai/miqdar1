@@ -60,6 +60,14 @@ async function ensureDbInitialized() {
             )
           `);
 
+          try {
+            await client.query(`ALTER TABLE meals ADD COLUMN IF NOT EXISTS lunch_ingredients TEXT`);
+            await client.query(`ALTER TABLE meals ADD COLUMN IF NOT EXISTS dinner_ingredients TEXT`);
+            await client.query(`ALTER TABLE meals ADD COLUMN IF NOT EXISTS verified_ingredients TEXT`);
+          } catch (e) {
+            console.warn("Could not add ingredients columns to meals table:", e);
+          }
+
           await client.query(`
             CREATE TABLE IF NOT EXISTS push_subscriptions (
               id VARCHAR(50) PRIMARY KEY,
@@ -1097,20 +1105,32 @@ export interface BusinessMealSubmission {
   verifiedDinner: boolean;
   verifiedSnacks: boolean;
   submittedAt: string;
+  lunchIngredients?: string[];
+  dinnerIngredients?: string[];
+  verifiedIngredients?: Record<string, boolean>;
 }
 
 export const BusinessMealsDB = {
   findLatest: async (): Promise<BusinessMealSubmission | undefined> => {
     if (pool) {
       await ensureDbInitialized();
-      const res = await pool.query("SELECT id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\" FROM meals ORDER BY submitted_at DESC LIMIT 1");
-      return res.rows[0];
+      const res = await pool.query("SELECT id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\", lunch_ingredients as \"lunchIngredients\", dinner_ingredients as \"dinnerIngredients\", verified_ingredients as \"verifiedIngredients\" FROM meals ORDER BY submitted_at DESC LIMIT 1");
+      const row = res.rows[0];
+      if (row) {
+        return {
+          ...row,
+          lunchIngredients: row.lunchIngredients ? JSON.parse(row.lunchIngredients) : [],
+          dinnerIngredients: row.dinnerIngredients ? JSON.parse(row.dinnerIngredients) : [],
+          verifiedIngredients: row.verifiedIngredients ? JSON.parse(row.verifiedIngredients) : {}
+        };
+      }
+      return undefined;
     }
     const list = await readCollection<BusinessMealSubmission>("meals");
     if (list.length === 0) return undefined;
     return list[list.length - 1];
   },
-  create: async (data: Omit<BusinessMealSubmission, "id" | "verifiedLunch" | "verifiedDinner" | "verifiedSnacks" | "submittedAt">): Promise<BusinessMealSubmission> => {
+  create: async (data: Omit<BusinessMealSubmission, "id" | "verifiedLunch" | "verifiedDinner" | "verifiedSnacks" | "submittedAt"> & { lunchIngredients?: string[], dinnerIngredients?: string[], verifiedIngredients?: Record<string, boolean> }): Promise<BusinessMealSubmission> => {
     const submittedAt = new Date().toISOString();
     const id = generateId();
     const item: BusinessMealSubmission = {
@@ -1120,12 +1140,28 @@ export const BusinessMealsDB = {
       verifiedDinner: false,
       verifiedSnacks: false,
       submittedAt,
+      lunchIngredients: data.lunchIngredients || [],
+      dinnerIngredients: data.dinnerIngredients || [],
+      verifiedIngredients: data.verifiedIngredients || {},
     };
     if (pool) {
       await ensureDbInitialized();
       await pool.query(
-        "INSERT INTO meals (id, lunch, dinner, snacks, date, verified_lunch, verified_dinner, verified_snacks, submitted_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-        [id, item.lunch, item.dinner, item.snacks, item.date, item.verifiedLunch, item.verifiedDinner, item.verifiedSnacks, item.submittedAt]
+        "INSERT INTO meals (id, lunch, dinner, snacks, date, verified_lunch, verified_dinner, verified_snacks, submitted_at, lunch_ingredients, dinner_ingredients, verified_ingredients) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+        [
+          id, 
+          item.lunch, 
+          item.dinner, 
+          item.snacks, 
+          item.date, 
+          item.verifiedLunch, 
+          item.verifiedDinner, 
+          item.verifiedSnacks, 
+          item.submittedAt,
+          JSON.stringify(item.lunchIngredients),
+          JSON.stringify(item.dinnerIngredients),
+          JSON.stringify(item.verifiedIngredients)
+        ]
       );
       return item;
     }
@@ -1134,19 +1170,49 @@ export const BusinessMealsDB = {
     await writeCollection("meals", list);
     return item;
   },
-  updateVerification: async (id: string, verifiedLunch: boolean, verifiedDinner: boolean, verifiedSnacks: boolean): Promise<BusinessMealSubmission | null> => {
+  updateVerification: async (
+    id: string, 
+    verifiedLunch: boolean, 
+    verifiedDinner: boolean, 
+    verifiedSnacks: boolean,
+    verifiedIngredients?: Record<string, boolean>
+  ): Promise<BusinessMealSubmission | null> => {
     if (pool) {
       await ensureDbInitialized();
-      const res = await pool.query(
-        "UPDATE meals SET verified_lunch = $1, verified_dinner = $2, verified_snacks = $3 WHERE id = $4 RETURNING id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\"",
-        [verifiedLunch, verifiedDinner, verifiedSnacks, id]
-      );
-      return res.rows[0] || null;
+      const verifiedIngredientsStr = verifiedIngredients ? JSON.stringify(verifiedIngredients) : null;
+      let res;
+      if (verifiedIngredientsStr) {
+        res = await pool.query(
+          "UPDATE meals SET verified_lunch = $1, verified_dinner = $2, verified_snacks = $3, verified_ingredients = $4 WHERE id = $5 RETURNING id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\", lunch_ingredients as \"lunchIngredients\", dinner_ingredients as \"dinnerIngredients\", verified_ingredients as \"verifiedIngredients\"",
+          [verifiedLunch, verifiedDinner, verifiedSnacks, verifiedIngredientsStr, id]
+        );
+      } else {
+        res = await pool.query(
+          "UPDATE meals SET verified_lunch = $1, verified_dinner = $2, verified_snacks = $3 WHERE id = $4 RETURNING id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\", lunch_ingredients as \"lunchIngredients\", dinner_ingredients as \"dinnerIngredients\", verified_ingredients as \"verifiedIngredients\"",
+          [verifiedLunch, verifiedDinner, verifiedSnacks, id]
+        );
+      }
+      const row = res.rows[0];
+      if (row) {
+        return {
+          ...row,
+          lunchIngredients: row.lunchIngredients ? JSON.parse(row.lunchIngredients) : [],
+          dinnerIngredients: row.dinnerIngredients ? JSON.parse(row.dinnerIngredients) : [],
+          verifiedIngredients: row.verifiedIngredients ? JSON.parse(row.verifiedIngredients) : {}
+        };
+      }
+      return null;
     }
     const list = await readCollection<BusinessMealSubmission>("meals");
     const index = list.findIndex((m) => m.id === id);
     if (index === -1) return null;
-    list[index] = { ...list[index], verifiedLunch, verifiedDinner, verifiedSnacks };
+    list[index] = { 
+      ...list[index], 
+      verifiedLunch, 
+      verifiedDinner, 
+      verifiedSnacks,
+      verifiedIngredients: verifiedIngredients || list[index].verifiedIngredients || {}
+    };
     await writeCollection("meals", list);
     return list[index];
   }

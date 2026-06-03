@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BusinessMealsDB, PushSubscriptionDB } from "@/lib/db";
 import { cookies } from "next/headers";
 import { sendPushNotification } from "@/lib/webpush";
+import { MIQDAR_MENU } from "@/lib/menu";
 
 async function getSession() {
   try {
@@ -43,11 +44,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "البيانات غير مكتملة" }, { status: 400 });
     }
 
+    // Lookup ingredients from MIQDAR_MENU
+    const selectedLunch = MIQDAR_MENU.lunch.find((item) => item.name === lunch);
+    const selectedDinner = MIQDAR_MENU.dinner.find((item) => item.name === dinner);
+
+    const lunchIngredients = selectedLunch ? selectedLunch.ingredients : [];
+    const dinnerIngredients = selectedDinner ? selectedDinner.ingredients : [];
+
+    const verifiedIngredients: Record<string, boolean> = {};
+    for (const ing of lunchIngredients) {
+      verifiedIngredients[ing] = false;
+    }
+    for (const ing of dinnerIngredients) {
+      verifiedIngredients[ing] = false;
+    }
+
     const item = await BusinessMealsDB.create({
       lunch: lunch.trim(),
       dinner: dinner.trim(),
       snacks: snacks.trim(),
       date,
+      lunchIngredients,
+      dinnerIngredients,
+      verifiedIngredients,
     });
 
     // Send push notification to Kitchen Supervisors and Managers
@@ -84,7 +103,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, verifiedLunch, verifiedDinner, verifiedSnacks } = body;
+    const { id, verifiedLunch, verifiedDinner, verifiedSnacks, verifiedIngredients } = body;
 
     if (!id) {
       return NextResponse.json({ error: "معرف الوجبات مطلوب" }, { status: 400 });
@@ -94,7 +113,8 @@ export async function PUT(request: NextRequest) {
       id,
       !!verifiedLunch,
       !!verifiedDinner,
-      !!verifiedSnacks
+      !!verifiedSnacks,
+      verifiedIngredients
     );
 
     if (!updated) {
@@ -107,3 +127,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "خطأ في خادم البيانات" }, { status: 500 });
   }
 }
+

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { MIQDAR_MENU } from "@/lib/menu";
 
 interface Ingredient {
   id: string;
@@ -92,8 +93,8 @@ export default function MiqdarBusinessPage() {
   const [passwordFormError, setPasswordFormError] = useState<string | null>(null);
 
   // Cook Form & Meals State
-  const [cookLunch, setCookLunch] = useState<string>("");
-  const [cookDinner, setCookDinner] = useState<string>("");
+  const [cookLunch, setCookLunch] = useState<string>(() => MIQDAR_MENU.lunch[0]?.name || "");
+  const [cookDinner, setCookDinner] = useState<string>(() => MIQDAR_MENU.dinner[0]?.name || "");
   const [cookSnacks, setCookSnacks] = useState<string>("");
   const [cookDate, setCookDate] = useState<string>("");
   const [latestMeals, setLatestMeals] = useState<any | null>(null);
@@ -692,8 +693,8 @@ export default function MiqdarBusinessPage() {
 
       if (response.ok && data.success) {
         setLatestMeals(data.meals);
-        setCookLunch("");
-        setCookDinner("");
+        setCookLunch(MIQDAR_MENU.lunch[0]?.name || "");
+        setCookDinner(MIQDAR_MENU.dinner[0]?.name || "");
         setCookSnacks("");
         showToast("🍳 تم تقديم وجبات الغد بنجاح وإرسالها للمشرف!");
         
@@ -716,7 +717,72 @@ export default function MiqdarBusinessPage() {
     }
   };
 
-  // Kitchen Supervisor Actions: Verify meal item availability
+  // Kitchen Supervisor Actions: Verify individual meal ingredient availability
+  const handleVerifyIngredient = async (ingredient: string, checked: boolean) => {
+    if (!latestMeals) return;
+
+    const updatedVerifiedIngredients = {
+      ...(latestMeals.verifiedIngredients || {}),
+      [ingredient]: checked,
+    };
+
+    // Calculate new overall verified statuses
+    const lunchIngs = latestMeals.lunchIngredients || [];
+    const dinnerIngs = latestMeals.dinnerIngredients || [];
+
+    const newVerifiedLunch = lunchIngs.length > 0
+      ? lunchIngs.every((ing: string) => !!updatedVerifiedIngredients[ing])
+      : latestMeals.verifiedLunch;
+
+    const newVerifiedDinner = dinnerIngs.length > 0
+      ? dinnerIngs.every((ing: string) => !!updatedVerifiedIngredients[ing])
+      : latestMeals.verifiedDinner;
+
+    const updatedMeals = {
+      ...latestMeals,
+      verifiedLunch: newVerifiedLunch,
+      verifiedDinner: newVerifiedDinner,
+      verifiedIngredients: updatedVerifiedIngredients,
+    };
+
+    setLatestMeals(updatedMeals);
+
+    try {
+      const response = await fetch("/api/business/meals", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: latestMeals.id,
+          verifiedLunch: newVerifiedLunch,
+          verifiedDinner: newVerifiedDinner,
+          verifiedSnacks: latestMeals.verifiedSnacks,
+          verifiedIngredients: updatedVerifiedIngredients,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setLatestMeals(data.meals);
+        showToast("✓ تم تحديث حالة التحقق للمكون");
+        
+        const statusAr = checked ? "متوفر" : "غير متوفر";
+        const newLog: ActivityLog = {
+          id: Date.now().toString(),
+          time: getCurrentTime(),
+          text: `المطبخ: تحديث حالة توافر المكون (${ingredient}) إلى (${statusAr}).`,
+          type: "kitchen",
+        };
+        setLogs((prev) => [newLog, ...prev]);
+      } else {
+        showToast(`❌ فشل تحديث المكون: ${data.error}`);
+        setLatestMeals(latestMeals); // Revert
+      }
+    } catch {
+      showToast("❌ خطأ في الاتصال بالخادم");
+      setLatestMeals(latestMeals); // Revert
+    }
+  };
+
+  // Kitchen Supervisor Actions: Verify meal item availability (used for snacks)
   const handleVerifyMealItem = async (mealType: "lunch" | "dinner" | "snacks", checked: boolean) => {
     if (!latestMeals) return;
 
@@ -737,6 +803,7 @@ export default function MiqdarBusinessPage() {
           verifiedLunch: updatedMeals.verifiedLunch,
           verifiedDinner: updatedMeals.verifiedDinner,
           verifiedSnacks: updatedMeals.verifiedSnacks,
+          verifiedIngredients: latestMeals.verifiedIngredients, // pass along existing
         }),
       });
       const data = await response.json();
@@ -1829,26 +1896,38 @@ export default function MiqdarBusinessPage() {
                         ? "border-[#76C139]/40 bg-[#76C139]/5 dark:bg-[#76C139]/5"
                         : "border-zinc-200 dark:border-zinc-800"
                     }`}>
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-3">
                         <div className="space-y-1 text-right">
                           <span className="text-[10px] text-zinc-400 font-bold">غداء الغد</span>
-                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-relaxed">
+                          <p className="text-xs font-bold text-[#0B532B] dark:text-[#76C139] leading-relaxed">
                             {latestMeals.lunch}
                           </p>
                         </div>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={latestMeals.verifiedLunch}
-                            onChange={(e) => handleVerifyMealItem("lunch", e.target.checked)}
-                            className="w-5 h-5 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                            المكونات متوفرة في المستودع
-                          </span>
-                        </label>
+
+                        {/* Ingredients Checklist */}
+                        {latestMeals.lunchIngredients && latestMeals.lunchIngredients.length > 0 && (
+                          <div className="space-y-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                            <span className="text-[10px] text-zinc-400 font-bold">التحقق من المكونات:</span>
+                            <div className="space-y-1.5">
+                              {latestMeals.lunchIngredients.map((ing: string) => {
+                                const isVerified = !!(latestMeals.verifiedIngredients && latestMeals.verifiedIngredients[ing]);
+                                return (
+                                  <label key={ing} className="flex items-center gap-2.5 cursor-pointer select-none py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isVerified}
+                                      onChange={(e) => handleVerifyIngredient(ing, e.target.checked)}
+                                      className="w-4 h-4 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
+                                    />
+                                    <span className={`text-xs ${isVerified ? "text-green-600 font-semibold" : "text-zinc-600 dark:text-zinc-400"}`}>
+                                      {ing} {isVerified ? "🟢 (موجود)" : "🔴 (ناقص)"}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1858,26 +1937,38 @@ export default function MiqdarBusinessPage() {
                         ? "border-[#76C139]/40 bg-[#76C139]/5 dark:bg-[#76C139]/5"
                         : "border-zinc-200 dark:border-zinc-800"
                     }`}>
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-3">
                         <div className="space-y-1 text-right">
                           <span className="text-[10px] text-zinc-400 font-bold">عشاء الغد</span>
-                          <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-relaxed">
+                          <p className="text-xs font-bold text-[#0B532B] dark:text-[#76C139] leading-relaxed">
                             {latestMeals.dinner}
                           </p>
                         </div>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={latestMeals.verifiedDinner}
-                            onChange={(e) => handleVerifyMealItem("dinner", e.target.checked)}
-                            className="w-5 h-5 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                            المكونات متوفرة في المستودع
-                          </span>
-                        </label>
+
+                        {/* Ingredients Checklist */}
+                        {latestMeals.dinnerIngredients && latestMeals.dinnerIngredients.length > 0 && (
+                          <div className="space-y-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                            <span className="text-[10px] text-zinc-400 font-bold">التحقق من المكونات:</span>
+                            <div className="space-y-1.5">
+                              {latestMeals.dinnerIngredients.map((ing: string) => {
+                                const isVerified = !!(latestMeals.verifiedIngredients && latestMeals.verifiedIngredients[ing]);
+                                return (
+                                  <label key={ing} className="flex items-center gap-2.5 cursor-pointer select-none py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isVerified}
+                                      onChange={(e) => handleVerifyIngredient(ing, e.target.checked)}
+                                      className="w-4 h-4 accent-[#0B532B] dark:accent-[#76C139] rounded cursor-pointer"
+                                    />
+                                    <span className={`text-xs ${isVerified ? "text-green-600 font-semibold" : "text-zinc-600 dark:text-zinc-400"}`}>
+                                      {ing} {isVerified ? "🟢 (موجود)" : "🔴 (ناقص)"}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2200,14 +2291,18 @@ export default function MiqdarBusinessPage() {
                         <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                           غداء الغد (غداء الغد) <span className="text-red-500">*</span>
                         </label>
-                        <textarea
-                          rows={3}
+                        <select
                           value={cookLunch}
                           onChange={(e) => setCookLunch(e.target.value)}
-                          placeholder="مثال: صدور دجاج مشوي مع أرز أبيض صيني وخضار سوتيه"
-                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
-                        />
+                        >
+                          {MIQDAR_MENU.lunch.map((item) => (
+                            <option key={item.id} value={item.name}>
+                              {item.name} ({item.ingredients.join("، ")})
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* عشاء الغد */}
@@ -2215,14 +2310,18 @@ export default function MiqdarBusinessPage() {
                         <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
                           عشاء الغد (عشاء الغد) <span className="text-red-500">*</span>
                         </label>
-                        <textarea
-                          rows={3}
+                        <select
                           value={cookDinner}
                           onChange={(e) => setCookDinner(e.target.value)}
-                          placeholder="مثال: لحم مفروم مشوي مع برغل ناعم وسلطة خضراء"
-                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100"
+                          className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
-                        />
+                        >
+                          {MIQDAR_MENU.dinner.map((item) => (
+                            <option key={item.id} value={item.name}>
+                              {item.name} ({item.ingredients.join("، ")})
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* سناك الغد */}
