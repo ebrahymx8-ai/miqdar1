@@ -240,24 +240,65 @@ function getFilePath(collection: Collection): string {
   return path.join(DB_PATH, `${collection}.json`);
 }
 
+// Global in-memory storage for Vercel / Serverless read-only filesystems
+const globalMemory = (global as any).memoryCollections || {};
+if (!(global as any).memoryCollections) {
+  (global as any).memoryCollections = globalMemory;
+}
+
 function readCollection<T>(collection: Collection): T[] {
+  if (!globalMemory[collection]) {
+    globalMemory[collection] = [];
+  }
+
   const filePath = getFilePath(collection);
-  if (!fs.existsSync(filePath)) {
-    fs.mkdirSync(DB_PATH, { recursive: true });
-    fs.writeFileSync(filePath, "[]", "utf-8");
-    return [];
-  }
+  
+  // Try to ensure directory and files exist
   try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw) as T[];
-  } catch {
-    return [];
+    if (!fs.existsSync(filePath)) {
+      fs.mkdirSync(DB_PATH, { recursive: true });
+      fs.writeFileSync(filePath, "[]", "utf-8");
+    }
+  } catch (err) {
+    // Silently catch error on read-only filesystems like Vercel
   }
+
+  // Try to read from filesystem
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const parsed = JSON.parse(raw) as T[];
+      if (Array.isArray(parsed)) {
+        // Merge with memory collection to ensure in-memory items are preserved
+        const fileIds = new Set(parsed.map((item: any) => item.id).filter(Boolean));
+        const combined = [...parsed];
+        for (const memItem of globalMemory[collection]) {
+          if (memItem && memItem.id && !fileIds.has(memItem.id)) {
+            combined.push(memItem);
+          }
+        }
+        globalMemory[collection] = combined;
+        return combined;
+      }
+    }
+  } catch (err) {
+    // Fallback to memory on failure
+  }
+
+  return globalMemory[collection];
 }
 
 function writeCollection<T>(collection: Collection, data: T[]): void {
-  fs.mkdirSync(DB_PATH, { recursive: true });
-  fs.writeFileSync(getFilePath(collection), JSON.stringify(data, null, 2), "utf-8");
+  // Always update memory first
+  globalMemory[collection] = data;
+
+  // Try to write to disk, catch EROFS silently on Vercel
+  try {
+    fs.mkdirSync(DB_PATH, { recursive: true });
+    fs.writeFileSync(getFilePath(collection), JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn(`Skipping writing collection ${collection} to file (read-only filesystem):`, err);
+  }
 }
 
 function generateId(): string {

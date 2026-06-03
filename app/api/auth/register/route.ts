@@ -10,11 +10,15 @@ export async function POST(request: NextRequest) {
     // Ensure the data directory and subscribers.json file exist to prevent server errors
     const dataDir = path.join(process.cwd(), "data");
     const subscribersFile = path.join(dataDir, "subscribers.json");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    if (!fs.existsSync(subscribersFile)) {
-      fs.writeFileSync(subscribersFile, "[]", "utf-8");
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      if (!fs.existsSync(subscribersFile)) {
+        fs.writeFileSync(subscribersFile, "[]", "utf-8");
+      }
+    } catch (e) {
+      console.warn("Read-only filesystem detected on Vercel:", e);
     }
 
     const body = await request.json();
@@ -55,7 +59,11 @@ export async function POST(request: NextRequest) {
         subscribers = [];
       }
     } catch (e) {
-      subscribers = [];
+      // Fallback: use global in-memory array on read-only systems like Vercel
+      if (!(global as any).subscribersMemory) {
+        (global as any).subscribersMemory = [];
+      }
+      subscribers = (global as any).subscribersMemory;
     }
 
     // Avoid duplicate subscriber entry in subscribers.json
@@ -87,7 +95,17 @@ export async function POST(request: NextRequest) {
       };
 
       subscribers.push(newSubscriber);
-      fs.writeFileSync(subscribersFile, JSON.stringify(subscribers, null, 2), "utf-8");
+      
+      // Update global memory store to persist on this instance
+      if ((global as any).subscribersMemory) {
+        (global as any).subscribersMemory = subscribers;
+      }
+
+      try {
+        fs.writeFileSync(subscribersFile, JSON.stringify(subscribers, null, 2), "utf-8");
+      } catch (writeError) {
+        // Silently skip on read-only filesystems (Vercel)
+      }
     }
 
     // Create Business Subscriber record in external DB if configured
