@@ -128,3 +128,30 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session || (session.role !== "cook" && session.role !== "manager")) {
+      return NextResponse.json({ error: "غير مصرح لغير الطباخ أو المدير" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+    const date = searchParams.get("date");
+
+    if (!type || !date || (type !== "lunch" && type !== "dinner")) {
+      return NextResponse.json({ error: "البيانات غير مكتملة أو غير صالحة" }, { status: 400 });
+    }
+
+    const updated = await BusinessMealsDB.clearMealSelection(date, type as "lunch" | "dinner");
+    if (!updated) {
+      return NextResponse.json({ error: "لم يتم العثور على وجبات لهذا التاريخ" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, meals: updated });
+  } catch (error) {
+    console.error("DELETE meals error:", error);
+    return NextResponse.json({ error: "خطأ في خادم البيانات" }, { status: 500 });
+  }
+}
+

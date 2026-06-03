@@ -1215,6 +1215,105 @@ export const BusinessMealsDB = {
     };
     await writeCollection("meals", list);
     return list[index];
+  },
+  findByDate: async (date: string): Promise<BusinessMealSubmission | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query(
+        "SELECT id, lunch, dinner, snacks, date, verified_lunch as \"verifiedLunch\", verified_dinner as \"verifiedDinner\", verified_snacks as \"verifiedSnacks\", submitted_at as \"submittedAt\", lunch_ingredients as \"lunchIngredients\", dinner_ingredients as \"dinnerIngredients\", verified_ingredients as \"verifiedIngredients\" FROM meals WHERE date = $1 LIMIT 1",
+        [date]
+      );
+      const row = res.rows[0];
+      if (row) {
+        return {
+          ...row,
+          lunchIngredients: row.lunchIngredients ? JSON.parse(row.lunchIngredients) : [],
+          dinnerIngredients: row.dinnerIngredients ? JSON.parse(row.dinnerIngredients) : [],
+          verifiedIngredients: row.verifiedIngredients ? JSON.parse(row.verifiedIngredients) : {}
+        };
+      }
+      return undefined;
+    }
+    const list = await readCollection<BusinessMealSubmission>("meals");
+    return list.find((m) => m.date === date);
+  },
+  clearMealSelection: async (date: string, type: "lunch" | "dinner"): Promise<BusinessMealSubmission | null> => {
+    const meal = await BusinessMealsDB.findByDate(date);
+    if (!meal) return null;
+
+    let lunch = meal.lunch;
+    let dinner = meal.dinner;
+    let lunchIngredients = meal.lunchIngredients || [];
+    let dinnerIngredients = meal.dinnerIngredients || [];
+    let verifiedLunch = meal.verifiedLunch;
+    let verifiedDinner = meal.verifiedDinner;
+    let verifiedIngredients = meal.verifiedIngredients || {};
+
+    if (type === "lunch") {
+      if (lunchIngredients) {
+        for (const ing of lunchIngredients) {
+          delete verifiedIngredients[ing];
+        }
+      }
+      lunch = "";
+      lunchIngredients = [];
+      verifiedLunch = false;
+    } else if (type === "dinner") {
+      if (dinnerIngredients) {
+        for (const ing of dinnerIngredients) {
+          delete verifiedIngredients[ing];
+        }
+      }
+      dinner = "";
+      dinnerIngredients = [];
+      verifiedDinner = false;
+    }
+
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query(
+        `UPDATE meals 
+         SET lunch = $1, dinner = $2, lunch_ingredients = $3, dinner_ingredients = $4, verified_lunch = $5, verified_dinner = $6, verified_ingredients = $7
+         WHERE id = $8
+         RETURNING id, lunch, dinner, snacks, date, verified_lunch as "verifiedLunch", verified_dinner as "verifiedDinner", verified_snacks as "verifiedSnacks", submitted_at as "submittedAt", lunch_ingredients as "lunchIngredients", dinner_ingredients as "dinnerIngredients", verified_ingredients as "verifiedIngredients"`,
+        [
+          lunch,
+          dinner,
+          JSON.stringify(lunchIngredients),
+          JSON.stringify(dinnerIngredients),
+          verifiedLunch,
+          verifiedDinner,
+          JSON.stringify(verifiedIngredients),
+          meal.id
+        ]
+      );
+      const row = res.rows[0];
+      if (row) {
+        return {
+          ...row,
+          lunchIngredients: row.lunchIngredients ? JSON.parse(row.lunchIngredients) : [],
+          dinnerIngredients: row.dinnerIngredients ? JSON.parse(row.dinnerIngredients) : [],
+          verifiedIngredients: row.verifiedIngredients ? JSON.parse(row.verifiedIngredients) : {}
+        };
+      }
+      return null;
+    } else {
+      const list = await readCollection<BusinessMealSubmission>("meals");
+      const index = list.findIndex((m) => m.id === meal.id);
+      if (index === -1) return null;
+      list[index] = {
+        ...list[index],
+        lunch,
+        dinner,
+        lunchIngredients,
+        dinnerIngredients,
+        verifiedLunch,
+        verifiedDinner,
+        verifiedIngredients,
+      };
+      await writeCollection("meals", list);
+      return list[index];
+    }
   }
 };
 

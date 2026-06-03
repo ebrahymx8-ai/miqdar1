@@ -109,7 +109,7 @@ export default function MiqdarBusinessPage() {
   // Toast Notification state
   const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: "", show: false });
 
-  // Sync theme and set default cook date to tomorrow and pre-populate meals
+  // Sync theme and set default cook date to tomorrow
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
     setTheme(isDark ? "dark" : "light");
@@ -117,14 +117,20 @@ export default function MiqdarBusinessPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setCookDate(tomorrow.toISOString().split("T")[0]);
-
-    if (MIQDAR_MENU?.lunch?.[0]) {
-      setCookLunch(MIQDAR_MENU.lunch[0].name);
-    }
-    if (MIQDAR_MENU?.dinner?.[0]) {
-      setCookDinner(MIQDAR_MENU.dinner[0].name);
-    }
   }, []);
+
+  // Synchronize cook state with fetched meals for the selected date
+  useEffect(() => {
+    if (latestMeals && latestMeals.date === cookDate) {
+      setCookLunch(latestMeals.lunch || "");
+      setCookDinner(latestMeals.dinner || "");
+      setCookSnacks(latestMeals.snacks || "");
+    } else {
+      setCookLunch("");
+      setCookDinner("");
+      setCookSnacks("");
+    }
+  }, [latestMeals, cookDate]);
 
   // Fetch all business database records
   const fetchDashboardData = async () => {
@@ -721,6 +727,46 @@ export default function MiqdarBusinessPage() {
       showToast("❌ خطأ في الاتصال");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Cook Actions: Clear a specific meal selection (delete/nullify)
+  const handleClearMeal = async (type: "lunch" | "dinner") => {
+    if (type === "lunch") {
+      setCookLunch("");
+    } else {
+      setCookDinner("");
+    }
+
+    if (latestMeals && latestMeals.date === cookDate) {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/business/meals?type=${type}&date=${cookDate}`, {
+          method: "DELETE",
+        });
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          setLatestMeals(data.meals);
+          showToast(`🗑️ تم حذف وجبة ${type === "lunch" ? "الغداء" : "العشاء"} بنجاح`);
+          
+          const newLog: ActivityLog = {
+            id: Date.now().toString(),
+            time: getCurrentTime(),
+            text: `الطباخ: تم حذف وجبة ${type === "lunch" ? "الغداء" : "العشاء"} لتاريخ (${cookDate}).`,
+            type: "kitchen",
+          };
+          setLogs((prev) => [newLog, ...prev]);
+        } else {
+          showToast("❌ فشل حذف الوجبة من قاعدة البيانات");
+        }
+      } catch {
+        showToast("❌ خطأ في الاتصال بالخادم");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      showToast("🧹 تم إفراغ الاختيار");
     }
   };
 
@@ -2295,15 +2341,27 @@ export default function MiqdarBusinessPage() {
 
                       {/* غداء الغد */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                          غداء الغد (غداء الغد) <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex justify-between items-center">
+                          <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                            غداء الغد (غداء الغد) <span className="text-red-500">*</span>
+                          </label>
+                          {cookLunch && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearMeal("lunch")}
+                              className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              🗑️ حذف الوجبة
+                            </button>
+                          )}
+                        </div>
                         <select
-                          value={cookLunch || (MIQDAR_MENU?.lunch?.[0]?.name || "")}
+                          value={cookLunch}
                           onChange={(e) => setCookLunch(e.target.value)}
                           className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
                         >
+                          <option value="">-- اختر الوجبة --</option>
                           {MIQDAR_MENU?.lunch?.map((item) => (
                             <option key={item.id} value={item.name}>
                               {item.name} ({item.ingredients.join("، ")})
@@ -2314,15 +2372,27 @@ export default function MiqdarBusinessPage() {
 
                       {/* عشاء الغد */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                          عشاء الغد (عشاء الغد) <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex justify-between items-center">
+                          <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                            عشاء الغد (عشاء الغد) <span className="text-red-500">*</span>
+                          </label>
+                          {cookDinner && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearMeal("dinner")}
+                              className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-extrabold flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              🗑️ حذف الوجبة
+                            </button>
+                          )}
+                        </div>
                         <select
-                          value={cookDinner || (MIQDAR_MENU?.dinner?.[0]?.name || "")}
+                          value={cookDinner}
                           onChange={(e) => setCookDinner(e.target.value)}
                           className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
                         >
+                          <option value="">-- اختر الوجبة --</option>
                           {MIQDAR_MENU?.dinner?.map((item) => (
                             <option key={item.id} value={item.name}>
                               {item.name} ({item.ingredients.join("، ")})
