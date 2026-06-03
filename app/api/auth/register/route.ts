@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { UserDB } from "@/lib/db";
+import { UserDB, BusinessSubscriberDB } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { cookies } from "next/headers";
 
@@ -32,6 +32,15 @@ export async function POST(request: NextRequest) {
       weight: parseFloat(weight),
       height: parseFloat(height),
       activityLevel,
+    });
+
+    // Create Business Subscriber record for internal business tracking
+    await BusinessSubscriberDB.create({
+      name: name.trim(),
+      neighborhood: "العزيزية", // Default neighborhood for new online registrations
+      packageType: "حياة يومية (وجبة وسناك)", // Default package type
+      deliveryStatus: "قيد التوصيل",
+      details: `مسجل عبر الموقع الإلكتروني - هاتف: ${cleanPhone}`,
     });
 
     // Create session
