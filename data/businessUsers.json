@@ -1,0 +1,30 @@
+[
+  {
+    "id": "u1",
+    "name": "مسؤول المطبخ",
+    "pinCode": "MDAwMF9taXFkYXJfc2FsdA==",
+    "role": "kitchen",
+    "createdAt": "2026-06-03T05:29:05.314Z"
+  },
+  {
+    "id": "u2",
+    "name": "مندوب المقاضي",
+    "pinCode": "MjIyMl9taXFkYXJfc2FsdA==",
+    "role": "purchaser",
+    "createdAt": "2026-06-03T05:29:05.314Z"
+  },
+  {
+    "id": "u3",
+    "name": "مندوب التوصيل",
+    "pinCode": "MzMzM19taXFkYXJfc2FsdA==",
+    "role": "delivery",
+    "createdAt": "2026-06-03T05:29:05.314Z"
+  },
+  {
+    "id": "u4",
+    "name": "مدير المشروع",
+    "pinCode": "NDQ0NF9taXFkYXJfc2FsdA==",
+    "role": "manager",
+    "createdAt": "2026-06-03T05:29:05.314Z"
+  }
+]

@@ -412,11 +412,21 @@ export default function HomePage() {
       {/* ===== Navigation ===== */}
       <nav className="glass sticky top-0 z-50 border-b border-brand-light/10 dark:bg-zinc-950/80 dark:border-zinc-800">
         <div className="container-app flex items-center justify-between h-16">
-          {/* Logo Text */}
-          <Link href="/" className="flex items-center gap-1.5 flex-shrink-0 group transition-all duration-300 hover:scale-[1.03]">
-            <span className="font-black text-2xl text-brand-dark dark:text-brand-light">مقدار</span>
-            <span className="font-light text-xl text-gray-300 dark:text-white/20">|</span>
-            <span className="font-extrabold text-2xl text-brand-orange tracking-tight">Miqdar</span>
+          {/* Logo Brand Header */}
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0 group transition-all duration-300 hover:scale-[1.03]">
+            <div className="relative w-10 h-10 rounded-lg bg-brand-cream dark:bg-zinc-800 p-0.5 flex items-center justify-center shadow-sm">
+              <Image
+                src="/logo.jpg"
+                alt="شعار مقدار"
+                width={36}
+                height={36}
+                className="object-contain rounded"
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-black text-lg text-brand-dark dark:text-brand-light leading-tight">مقدار</span>
+              <span className="text-[9px] text-brand-orange font-bold">الوجبات الصحية</span>
+            </div>
           </Link>
 
           {/* Nav Links */}
