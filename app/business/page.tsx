@@ -93,8 +93,8 @@ export default function MiqdarBusinessPage() {
   const [passwordFormError, setPasswordFormError] = useState<string | null>(null);
 
   // Cook Form & Meals State
-  const [cookLunch, setCookLunch] = useState<string>(() => MIQDAR_MENU.lunch[0]?.name || "");
-  const [cookDinner, setCookDinner] = useState<string>(() => MIQDAR_MENU.dinner[0]?.name || "");
+  const [cookLunch, setCookLunch] = useState<string>("");
+  const [cookDinner, setCookDinner] = useState<string>("");
   const [cookSnacks, setCookSnacks] = useState<string>("");
   const [cookDate, setCookDate] = useState<string>("");
   const [latestMeals, setLatestMeals] = useState<any | null>(null);
@@ -109,7 +109,7 @@ export default function MiqdarBusinessPage() {
   // Toast Notification state
   const [toast, setToast] = useState<{ message: string; show: boolean }>({ message: "", show: false });
 
-  // Sync theme and set default cook date to tomorrow
+  // Sync theme and set default cook date to tomorrow and pre-populate meals
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
     setTheme(isDark ? "dark" : "light");
@@ -117,6 +117,13 @@ export default function MiqdarBusinessPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setCookDate(tomorrow.toISOString().split("T")[0]);
+
+    if (MIQDAR_MENU?.lunch?.[0]) {
+      setCookLunch(MIQDAR_MENU.lunch[0].name);
+    }
+    if (MIQDAR_MENU?.dinner?.[0]) {
+      setCookDinner(MIQDAR_MENU.dinner[0].name);
+    }
   }, []);
 
   // Fetch all business database records
@@ -2292,12 +2299,12 @@ export default function MiqdarBusinessPage() {
                           غداء الغد (غداء الغد) <span className="text-red-500">*</span>
                         </label>
                         <select
-                          value={cookLunch}
+                          value={cookLunch || (MIQDAR_MENU?.lunch?.[0]?.name || "")}
                           onChange={(e) => setCookLunch(e.target.value)}
                           className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
                         >
-                          {MIQDAR_MENU.lunch.map((item) => (
+                          {MIQDAR_MENU?.lunch?.map((item) => (
                             <option key={item.id} value={item.name}>
                               {item.name} ({item.ingredients.join("، ")})
                             </option>
@@ -2311,12 +2318,12 @@ export default function MiqdarBusinessPage() {
                           عشاء الغد (عشاء الغد) <span className="text-red-500">*</span>
                         </label>
                         <select
-                          value={cookDinner}
+                          value={cookDinner || (MIQDAR_MENU?.dinner?.[0]?.name || "")}
                           onChange={(e) => setCookDinner(e.target.value)}
                           className="w-full text-sm p-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-[#0B532B] dark:focus:ring-[#76C139] text-zinc-800 dark:text-zinc-100 cursor-pointer"
                           required
                         >
-                          {MIQDAR_MENU.dinner.map((item) => (
+                          {MIQDAR_MENU?.dinner?.map((item) => (
                             <option key={item.id} value={item.name}>
                               {item.name} ({item.ingredients.join("، ")})
                             </option>
