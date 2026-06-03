@@ -91,3 +91,30 @@ export async function PATCH() {
     return NextResponse.json({ error: "خطأ في خادم البيانات" }, { status: 500 });
   }
 }
+
+// Delete method
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== "manager") {
+      return NextResponse.json({ error: "غير مصرح لغير المدير" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "معرف المشترك مطلوب" }, { status: 400 });
+    }
+
+    const success = await BusinessSubscriberDB.delete(id);
+    if (!success) {
+      return NextResponse.json({ error: "المشترك غير موجود" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: "تم حذف المشترك بنجاح" });
+  } catch (error) {
+    console.error("Delete subscriber error:", error);
+    return NextResponse.json({ error: "خطأ في خادم البيانات" }, { status: 500 });
+  }
+}
