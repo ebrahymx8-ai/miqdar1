@@ -7,20 +7,20 @@ export async function GET() {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
-    const user = UserDB.findById(session.userId);
+    const user = await UserDB.findById(session.userId);
     if (!user) return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
 
-    const subscriptions = SubscriptionDB.findByUserId(session.userId);
+    const subscriptions = await SubscriptionDB.findByUserId(session.userId);
 
     // Check for expiring subscriptions and update status
     const now = new Date();
     for (const sub of subscriptions) {
       if (sub.status === "active" && new Date(sub.endDate) < now) {
-        SubscriptionDB.update(sub.id, { status: "expired" });
+        await SubscriptionDB.update(sub.id, { status: "expired" });
       }
     }
 
-    const updatedSubs = SubscriptionDB.findByUserId(session.userId);
+    const updatedSubs = await SubscriptionDB.findByUserId(session.userId);
 
     return NextResponse.json({
       session: { name: user.name, phone: user.phone, email: user.email },

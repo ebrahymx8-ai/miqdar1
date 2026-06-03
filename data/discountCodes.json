@@ -1,0 +1,18 @@
+[
+  {
+    "id": "mpxxyx884sagfaxv04q",
+    "code": "MIQDAR5",
+    "percentage": 5,
+    "isActive": true,
+    "usageCount": 0,
+    "createdAt": "2026-06-03T10:46:49.016Z"
+  },
+  {
+    "id": "mpxxyx88wxaklp8bvvo",
+    "code": "WELCOME10",
+    "percentage": 10,
+    "isActive": true,
+    "usageCount": 0,
+    "createdAt": "2026-06-03T10:46:49.016Z"
+  }
+]

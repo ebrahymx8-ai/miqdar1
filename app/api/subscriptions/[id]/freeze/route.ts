@@ -11,16 +11,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const { action } = await request.json(); // "freeze" | "unfreeze"
 
-    const sub = SubscriptionDB.findById(id);
+    const sub = await SubscriptionDB.findById(id);
     if (!sub || sub.userId !== session.userId) {
       return NextResponse.json({ error: "الاشتراك غير موجود" }, { status: 404 });
     }
 
     let result;
     if (action === "freeze") {
-      result = SubscriptionDB.freeze(id);
+      result = await SubscriptionDB.freeze(id);
       if (result.success) {
-        const user = UserDB.findById(session.userId);
+        const user = await UserDB.findById(session.userId);
         if (user) {
           const resumeDate = new Date(Date.now() + 86400000).toLocaleDateString("ar-SA");
           await sendNotification({
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
     } else if (action === "unfreeze") {
-      result = SubscriptionDB.unfreeze(id);
+      result = await SubscriptionDB.unfreeze(id);
     } else {
       return NextResponse.json({ error: "إجراء غير معروف" }, { status: 400 });
     }

@@ -63,6 +63,76 @@ async function ensureDbInitialized() {
             )
           `);
 
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+              id VARCHAR(50) PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              phone VARCHAR(20) UNIQUE NOT NULL,
+              email VARCHAR(100) UNIQUE NOT NULL,
+              password VARCHAR(255) NOT NULL,
+              gender VARCHAR(10) NOT NULL CHECK (gender IN ('male', 'female')),
+              age INT NOT NULL,
+              weight NUMERIC(5,2) NOT NULL,
+              height NUMERIC(5,2) NOT NULL,
+              activity_level VARCHAR(50) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS subscriptions (
+              id VARCHAR(50) PRIMARY KEY,
+              user_id VARCHAR(50) NOT NULL,
+              goal VARCHAR(20) NOT NULL CHECK (goal IN ('bulk', 'cut', 'maintain')),
+              menu_type VARCHAR(20) NOT NULL CHECK (menu_type IN ('basic', 'premium')),
+              duration_days INT NOT NULL,
+              start_date VARCHAR(50) NOT NULL,
+              end_date VARCHAR(50) NOT NULL,
+              status VARCHAR(20) NOT NULL,
+              frozen_days INT NOT NULL,
+              max_freeze_days INT NOT NULL,
+              target_calories INT NOT NULL,
+              price NUMERIC(10,2) NOT NULL,
+              delivery_fee NUMERIC(10,2) NOT NULL,
+              discount_code VARCHAR(50),
+              discount_amount NUMERIC(10,2) NOT NULL,
+              total_price NUMERIC(10,2) NOT NULL,
+              payment_method VARCHAR(20) NOT NULL,
+              payment_status VARCHAR(20) NOT NULL,
+              receipt_image_url VARCHAR(255),
+              moyasar_payment_id VARCHAR(100),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS discount_codes (
+              id VARCHAR(50) PRIMARY KEY,
+              code VARCHAR(50) UNIQUE NOT NULL,
+              percentage INT NOT NULL,
+              is_active BOOLEAN NOT NULL DEFAULT TRUE,
+              usage_count INT NOT NULL DEFAULT 0,
+              affiliate_phone VARCHAR(20),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+              id VARCHAR(50) PRIMARY KEY,
+              user_id VARCHAR(50) NOT NULL,
+              subscription_id VARCHAR(50) NOT NULL,
+              type VARCHAR(50) NOT NULL,
+              channel VARCHAR(20) NOT NULL,
+              status VARCHAR(20) NOT NULL,
+              message TEXT NOT NULL,
+              scheduled_at VARCHAR(50) NOT NULL,
+              sent_at VARCHAR(50),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+
           const usersCount = await client.query("SELECT COUNT(*) FROM business_users");
           if (parseInt(usersCount.rows[0].count, 10) === 0) {
             const salt = "_miqdar_salt";
@@ -151,6 +221,15 @@ async function ensureDbInitialized() {
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
               `, sub);
             }
+          }
+
+          const discCount = await client.query("SELECT COUNT(*) FROM discount_codes");
+          if (parseInt(discCount.rows[0].count, 10) === 0) {
+            await client.query(`
+              INSERT INTO discount_codes (id, code, percentage, is_active, usage_count) VALUES
+              ('d1', 'MIQDAR5', 5, true, 0),
+              ('d2', 'WELCOME10', 10, true, 0)
+            `);
           }
 
           await client.query("COMMIT");
@@ -306,18 +385,71 @@ function generateId(): string {
 }
 
 export const UserDB = {
-  findAll: (): User[] => readCollection<User>("users"),
-  findById: (id: string) => readCollection<User>("users").find((u) => u.id === id),
-  findByPhone: (phone: string) => readCollection<User>("users").find((u) => u.phone === phone),
-  findByEmail: (email: string) => readCollection<User>("users").find((u) => u.email === email),
-  create: (data: Omit<User, "id" | "createdAt">): User => {
+  findAll: async (): Promise<User[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users");
+      return res.rows;
+    }
+    return readCollection<User>("users");
+  },
+  findById: async (id: string): Promise<User | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE id = $1", [id]);
+      return res.rows[0];
+    }
+    return readCollection<User>("users").find((u) => u.id === id);
+  },
+  findByPhone: async (phone: string): Promise<User | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE phone = $1", [phone]);
+      return res.rows[0];
+    }
+    return readCollection<User>("users").find((u) => u.phone === phone);
+  },
+  findByEmail: async (email: string): Promise<User | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, name, phone, email, password, gender, age, weight, height, activity_level as \"activityLevel\", created_at as \"createdAt\" FROM users WHERE email = $1", [email]);
+      return res.rows[0];
+    }
+    return readCollection<User>("users").find((u) => u.email === email);
+  },
+  create: async (data: Omit<User, "id" | "createdAt">): Promise<User> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const id = generateId();
+      const createdAt = new Date().toISOString();
+      await pool.query(
+        "INSERT INTO users (id, name, phone, email, password, gender, age, weight, height, activity_level, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        [id, data.name, data.phone, data.email, data.password, data.gender, data.age, data.weight, data.height, data.activityLevel, createdAt]
+      );
+      return { ...data, id, createdAt };
+    }
     const users = readCollection<User>("users");
     const user: User = { ...data, id: generateId(), createdAt: new Date().toISOString() };
     users.push(user);
     writeCollection("users", users);
     return user;
   },
-  update: (id: string, data: Partial<User>): User | null => {
+  update: async (id: string, data: Partial<User>): Promise<User | null> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const keys = Object.keys(data).filter((k) => (data as any)[k] !== undefined);
+      if (keys.length === 0) return UserDB.findById(id).then((u) => u || null);
+      
+      const dbKeys = keys.map((k) => k === "activityLevel" ? "activity_level" : k);
+      const setClause = dbKeys.map((k, idx) => `"${k}" = $${idx + 2}`).join(", ");
+      const values = keys.map((k) => (data as any)[k]);
+      
+      const res = await pool.query(
+        `UPDATE users SET ${setClause} WHERE id = $1 RETURNING id, name, phone, email, password, gender, age, weight, height, activity_level as "activityLevel", created_at as "createdAt"`,
+        [id, ...values]
+      );
+      return res.rows[0] || null;
+    }
     const users = readCollection<User>("users");
     const index = users.findIndex((u) => u.id === id);
     if (index === -1) return null;
@@ -328,18 +460,83 @@ export const UserDB = {
 };
 
 export const SubscriptionDB = {
-  findAll: (): Subscription[] => readCollection<Subscription>("subscriptions"),
-  findById: (id: string) => readCollection<Subscription>("subscriptions").find((s) => s.id === id),
-  findByUserId: (userId: string) => readCollection<Subscription>("subscriptions").filter((s) => s.userId === userId),
-  findActive: (userId: string) => readCollection<Subscription>("subscriptions").find((s) => s.userId === userId && s.status === "active"),
-  create: (data: Omit<Subscription, "id" | "createdAt" | "updatedAt">): Subscription => {
+  findAll: async (): Promise<Subscription[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions");
+      return res.rows;
+    }
+    return readCollection<Subscription>("subscriptions");
+  },
+  findById: async (id: string): Promise<Subscription | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE id = $1", [id]);
+      return res.rows[0];
+    }
+    return readCollection<Subscription>("subscriptions").find((s) => s.id === id);
+  },
+  findByUserId: async (userId: string): Promise<Subscription[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE user_id = $1", [userId]);
+      return res.rows;
+    }
+    return readCollection<Subscription>("subscriptions").filter((s) => s.userId === userId);
+  },
+  findActive: async (userId: string): Promise<Subscription | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", goal, menu_type as \"menuType\", duration_days as \"durationDays\", start_date as \"startDate\", end_date as \"endDate\", status, frozen_days as \"frozenDays\", max_freeze_days as \"maxFreezeDays\", target_calories as \"targetCalories\", price, delivery_fee as \"deliveryFee\", discount_code as \"discountCode\", discount_amount as \"discountAmount\", total_price as \"totalPrice\", payment_method as \"paymentMethod\", payment_status as \"paymentStatus\", receipt_image_url as \"receiptImageUrl\", moyasar_payment_id as \"moyasarPaymentId\", created_at as \"createdAt\", updated_at as \"updatedAt\" FROM subscriptions WHERE user_id = $1 AND status = 'active'", [userId]);
+      return res.rows[0];
+    }
+    return readCollection<Subscription>("subscriptions").find((s) => s.userId === userId && s.status === "active");
+  },
+  create: async (data: Omit<Subscription, "id" | "createdAt" | "updatedAt">): Promise<Subscription> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const id = generateId();
+      const createdAt = new Date().toISOString();
+      const updatedAt = new Date().toISOString();
+      await pool.query(
+        `INSERT INTO subscriptions (id, user_id, goal, menu_type, duration_days, start_date, end_date, status, frozen_days, max_freeze_days, target_calories, price, delivery_fee, discount_code, discount_amount, total_price, payment_method, payment_status, receipt_image_url, moyasar_payment_id, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+        [id, data.userId, data.goal, data.menuType, data.durationDays, data.startDate, data.endDate, data.status, data.frozenDays, data.maxFreezeDays, data.targetCalories, data.price, data.deliveryFee, data.discountCode || null, data.discountAmount, data.totalPrice, data.paymentMethod, data.paymentStatus, data.receiptImageUrl || null, data.moyasarPaymentId || null, createdAt, updatedAt]
+      );
+      return { ...data, id, createdAt, updatedAt };
+    }
     const subs = readCollection<Subscription>("subscriptions");
     const sub: Subscription = { ...data, id: generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     subs.push(sub);
     writeCollection("subscriptions", subs);
     return sub;
   },
-  update: (id: string, data: Partial<Subscription>): Subscription | null => {
+  update: async (id: string, data: Partial<Subscription>): Promise<Subscription | null> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const keys = Object.keys(data).filter((k) => (data as any)[k] !== undefined);
+      if (keys.length === 0) return SubscriptionDB.findById(id).then((s) => s || null);
+      
+      const snakeMap: Record<string, string> = {
+        userId: "user_id", menuType: "menu_type", durationDays: "duration_days",
+        startDate: "start_date", endDate: "end_date", frozenDays: "frozen_days",
+        maxFreezeDays: "max_freeze_days", targetCalories: "target_calories",
+        deliveryFee: "delivery_fee", discountCode: "discount_code",
+        discountAmount: "discount_amount", totalPrice: "total_price",
+        paymentMethod: "payment_method", paymentStatus: "payment_status",
+        receiptImageUrl: "receipt_image_url", moyasarPaymentId: "moyasar_payment_id"
+      };
+
+      const setClause = keys.map((k, idx) => `"${snakeMap[k] || k}" = $${idx + 2}`).join(", ");
+      const values = keys.map((k) => (data as any)[k]);
+      const updatedAt = new Date().toISOString();
+
+      const res = await pool.query(
+        `UPDATE subscriptions SET ${setClause}, updated_at = $${values.length + 2} WHERE id = $1 RETURNING id, user_id as "userId", goal, menu_type as "menuType", duration_days as "durationDays", start_date as "startDate", end_date as "endDate", status, frozen_days as "frozenDays", max_freeze_days as "maxFreezeDays", target_calories as "targetCalories", price, delivery_fee as "deliveryFee", discount_code as "discountCode", discount_amount as "discountAmount", total_price as "totalPrice", payment_method as "paymentMethod", payment_status as "paymentStatus", receipt_image_url as "receiptImageUrl", moyasar_payment_id as "moyasarPaymentId", created_at as "createdAt", updated_at as "updatedAt"`,
+        [id, ...values, updatedAt]
+      );
+      return res.rows[0] || null;
+    }
     const subs = readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return null;
@@ -347,7 +544,17 @@ export const SubscriptionDB = {
     writeCollection("subscriptions", subs);
     return subs[index];
   },
-  freeze: (id: string) => {
+  freeze: async (id: string) => {
+    if (pool) {
+      await ensureDbInitialized();
+      const sub = await SubscriptionDB.findById(id);
+      if (!sub) return { success: false, message: "الاشتراك غير موجود" };
+      if (sub.status !== "active") return { success: false, message: "الاشتراك غير نشط" };
+      if (sub.frozenDays >= sub.maxFreezeDays) return { success: false, message: `استنفدت أيام التجميد (${sub.maxFreezeDays} أيام)` };
+      
+      await SubscriptionDB.update(id, { status: "frozen" });
+      return { success: true, message: "تم تجميد الاشتراك بنجاح" };
+    }
     const subs = readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return { success: false, message: "الاشتراك غير موجود" };
@@ -357,7 +564,16 @@ export const SubscriptionDB = {
     writeCollection("subscriptions", subs);
     return { success: true, message: "تم تجميد الاشتراك بنجاح" };
   },
-  unfreeze: (id: string) => {
+  unfreeze: async (id: string) => {
+    if (pool) {
+      await ensureDbInitialized();
+      const sub = await SubscriptionDB.findById(id);
+      if (!sub) return { success: false, message: "الاشتراك غير موجود" };
+      if (sub.status !== "frozen") return { success: false, message: "الاشتراك ليس مجمداً" };
+      
+      await SubscriptionDB.update(id, { status: "active", frozenDays: sub.frozenDays + 1 });
+      return { success: true, message: "تم استئناف الاشتراك بنجاح" };
+    }
     const subs = readCollection<Subscription>("subscriptions");
     const index = subs.findIndex((s) => s.id === id);
     if (index === -1) return { success: false, message: "الاشتراك غير موجود" };
@@ -369,13 +585,32 @@ export const SubscriptionDB = {
 };
 
 export const DiscountDB = {
-  findByCode: (code: string) => readCollection<DiscountCode>("discountCodes").find((d) => d.code.toUpperCase() === code.toUpperCase() && d.isActive),
-  validate: (code: string): { valid: boolean; percentage: number; message: string } => {
-    const d = DiscountDB.findByCode(code);
+  findByCode: async (code: string): Promise<DiscountCode | undefined> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, code, percentage, is_active as \"isActive\", usage_count as \"usageCount\", affiliate_phone as \"affiliatePhone\", created_at as \"createdAt\" FROM discount_codes WHERE UPPER(code) = $1 AND is_active = true", [code.toUpperCase()]);
+      return res.rows[0];
+    }
+    return readCollection<DiscountCode>("discountCodes").find((d) => d.code.toUpperCase() === code.toUpperCase() && d.isActive);
+  },
+  validate: async (code: string): Promise<{ valid: boolean; percentage: number; message: string }> => {
+    const d = await DiscountDB.findByCode(code);
     if (!d) return { valid: false, percentage: 0, message: "كود الخصم غير صالح أو منتهي" };
     return { valid: true, percentage: d.percentage, message: `✅ تم تطبيق خصم ${d.percentage}%` };
   },
-  seed: () => {
+  seed: async (): Promise<void> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT COUNT(*) FROM discount_codes");
+      if (parseInt(res.rows[0].count, 10) === 0) {
+        await pool.query(`
+          INSERT INTO discount_codes (id, code, percentage, is_active, usage_count, created_at) VALUES
+          ($1, 'MIQDAR5', 5, true, 0, $3),
+          ($2, 'WELCOME10', 10, true, 0, $3)
+        `, [generateId(), generateId(), new Date().toISOString()]);
+      }
+      return;
+    }
     const existing = readCollection<DiscountCode>("discountCodes");
     if (existing.length === 0) {
       writeCollection("discountCodes", [
@@ -387,15 +622,39 @@ export const DiscountDB = {
 };
 
 export const NotificationDB = {
-  create: (data: Omit<Notification, "id" | "createdAt">): Notification => {
+  create: async (data: Omit<Notification, "id" | "createdAt">): Promise<Notification> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const id = generateId();
+      const createdAt = new Date().toISOString();
+      await pool.query(
+        `INSERT INTO notifications (id, user_id, subscription_id, type, channel, status, message, scheduled_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, data.userId, data.subscriptionId, data.type, data.channel, data.status, data.message, data.scheduledAt, createdAt]
+      );
+      return { ...data, id, createdAt };
+    }
     const notifs = readCollection<Notification>("notifications");
     const notif: Notification = { ...data, id: generateId(), createdAt: new Date().toISOString() };
     notifs.push(notif);
     writeCollection("notifications", notifs);
     return notif;
   },
-  findPending: () => readCollection<Notification>("notifications").filter((n) => n.status === "pending"),
-  markSent: (id: string) => {
+  findPending: async (): Promise<Notification[]> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const res = await pool.query("SELECT id, user_id as \"userId\", subscription_id as \"subscriptionId\", type, channel, status, message, scheduled_at as \"scheduledAt\", sent_at as \"sentAt\", created_at as \"createdAt\" FROM notifications WHERE status = 'pending'");
+      return res.rows;
+    }
+    return readCollection<Notification>("notifications").filter((n) => n.status === "pending");
+  },
+  markSent: async (id: string): Promise<void> => {
+    if (pool) {
+      await ensureDbInitialized();
+      const sentAt = new Date().toISOString();
+      await pool.query("UPDATE notifications SET status = 'sent', sent_at = $2 WHERE id = $1", [id, sentAt]);
+      return;
+    }
     const notifs = readCollection<Notification>("notifications");
     const index = notifs.findIndex((n) => n.id === id);
     if (index !== -1) { notifs[index].status = "sent"; notifs[index].sentAt = new Date().toISOString(); writeCollection("notifications", notifs); }
@@ -778,6 +1037,7 @@ if (typeof window === "undefined") {
       await BusinessUserDB.seed();
       await BusinessIngredientDB.seed();
       await BusinessSubscriberDB.seed();
+      await DiscountDB.seed();
     } catch (err) {
       console.error("Seeding business database failed:", err);
     }

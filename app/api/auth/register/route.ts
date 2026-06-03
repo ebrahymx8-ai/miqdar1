@@ -34,14 +34,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Check duplicate
-    if (UserDB.findByPhone(cleanPhone)) {
+    if (await UserDB.findByPhone(cleanPhone)) {
       return NextResponse.json({ error: "رقم الجوال مسجل مسبقاً" }, { status: 409 });
     }
-    if (UserDB.findByEmail(email)) {
+    if (await UserDB.findByEmail(email)) {
       return NextResponse.json({ error: "البريد الإلكتروني مسجل مسبقاً" }, { status: 409 });
     }
 
-    const user = UserDB.create({
+    const user = await UserDB.create({
       name, phone: cleanPhone, email,
       password: hashPassword(password),
       gender, age: parseInt(age),

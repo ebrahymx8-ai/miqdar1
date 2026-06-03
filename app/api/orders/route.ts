@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Max freeze days based on duration
     const maxFreezeDays = durationDays === 26 ? 3 : 5;
 
-    const sub = SubscriptionDB.create({
+    const sub = await SubscriptionDB.create({
       userId: session.userId,
       goal, menuType,
       durationDays,
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Schedule confirmation notification
-    const user = UserDB.findById(session.userId);
+    const user = await UserDB.findById(session.userId);
     if (user && sub.status === "active") {
       await sendNotification({
         phone: user.phone,
@@ -62,7 +62,7 @@ export async function GET() {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
-    const subs = SubscriptionDB.findByUserId(session.userId);
+    const subs = await SubscriptionDB.findByUserId(session.userId);
     return NextResponse.json({ subscriptions: subs });
   } catch {
     return NextResponse.json({ error: "خطأ في جلب البيانات" }, { status: 500 });

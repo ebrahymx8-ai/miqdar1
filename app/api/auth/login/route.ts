@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanPhone = phone.replace(/\D/g, "");
-    const user = UserDB.findByPhone(cleanPhone);
+    const user = await UserDB.findByPhone(cleanPhone);
     if (!user || !verifyPassword(password, user.password)) {
       return NextResponse.json({ error: "رقم الجوال أو كلمة المرور غير صحيحة" }, { status: 401 });
     }

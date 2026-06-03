@@ -18,13 +18,13 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanPhone = phone.replace(/\D/g, "");
-    const user = UserDB.findByPhone(cleanPhone);
+    const user = await UserDB.findByPhone(cleanPhone);
     if (!user) {
       return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
     }
 
     const hashedPassword = hashPassword(password);
-    const updated = UserDB.update(user.id, { password: hashedPassword });
+    const updated = await UserDB.update(user.id, { password: hashedPassword });
     if (!updated) {
       return NextResponse.json({ error: "فشل في تحديث كلمة المرور" }, { status: 500 });
     }

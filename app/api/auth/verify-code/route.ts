@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanPhone = phone.replace(/\D/g, "");
-    const user = UserDB.findByPhone(cleanPhone);
+    const user = await UserDB.findByPhone(cleanPhone);
     if (!user) {
       return NextResponse.json({ error: "المستخدم غير موجود" }, { status: 404 });
     }

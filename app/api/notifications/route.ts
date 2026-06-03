@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const allSubs = SubscriptionDB.findAll();
+  const allSubs = await SubscriptionDB.findAll();
   const now = new Date();
   const results = [];
 
@@ -23,14 +23,14 @@ export async function GET(request: NextRequest) {
 
     // Send reminder 3 days before expiry
     if (daysLeft === 3 || daysLeft === 1) {
-      const user = UserDB.findById(sub.userId);
+      const user = await UserDB.findById(sub.userId);
       if (!user) continue;
 
       const message = NOTIFICATION_TEMPLATES.renewalReminder(user.name, daysLeft);
       const result = await sendNotification({ phone: user.phone, message, type: "whatsapp" });
 
       // Log notification
-      NotificationDB.create({
+      await NotificationDB.create({
         userId: sub.userId,
         subscriptionId: sub.id,
         type: "renewal_reminder",
